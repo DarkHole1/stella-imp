@@ -26,7 +26,7 @@ let main () =
         if Array.length Sys.argv > 1 then open_in Sys.argv.(1)
         else stdin
     in
-    try print_string (showTree (parse channel));
+    try TypeCheck.typecheckProgram (parse channel);
         flush stdout;
         exit 0
     with BNFC_Util.Parse_error (start_pos, end_pos) ->
