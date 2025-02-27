@@ -1,7 +1,10 @@
 (library
  (name stella))
 
-(env (dev (flags (:standard -w -39-27-33))))
+(env
+ (dev
+  (flags
+   (:standard -w -39-27-33))))
 
 (ocamllex LexStella)
 
