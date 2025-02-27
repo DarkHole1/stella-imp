@@ -44,6 +44,13 @@ type context = (string * typeT) list
 
 let put (ctx : context) (s : string) (ty : typeT) : context = (s, ty) :: ctx
 
+let put_params (ctx : context) (params : paramDecl list) : context =
+  List.concat
+    [
+      List.map (fun (AParamDecl (StellaIdent name, ty)) -> (name, ty)) params;
+      ctx;
+    ]
+
 let rec get (ctx : context) (s : string) : typeT option =
   match ctx with
   | (s', ty) :: ctx' -> if s = s' then Some ty else get ctx' s
@@ -51,6 +58,9 @@ let rec get (ctx : context) (s : string) : typeT option =
 
 let checkMain (ctx : context) : unit =
   match get ctx "main" with None -> raise (TyExn MissingMain) | _ -> ()
+
+let typecheck (ctx : context) (expr : AbsStella.expr) (ty : AbsStella.typeT) =
+  Printf.printf "typechecker is not implemented\n"
 
 let typecheckProgram (program : program) =
   match program with
@@ -70,10 +80,16 @@ let typecheckProgram (program : program) =
           [] decls
       in
       checkMain ctx;
-      List.fold_right (fun a b -> ()) ctx ()
-
-let typecheck (expr : AbsStella.expr) (ty : AbsStella.typeT) =
-  Printf.printf "typechecker is not implemented\n"
+      List.fold_left
+        (fun _ decl ->
+          match decl with
+          (* TODO: Add decl support *)
+          | DeclFun
+              ([], _, params, SomeReturnType tyReturn, NoThrowType, [], expr) ->
+              let ctx' = put_params ctx params in
+              typecheck ctx' expr tyReturn
+          | _ -> not_implemented ())
+        () decls
 
 (*
 let infer (expr : AbsStella.expr) : AbsStella.typeT =
