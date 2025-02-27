@@ -32,18 +32,37 @@ type tyError =
 
 exception TyExn of tyError
 
-let checkMain (decls : decl list) =
-  let isMain o =
-    match o with
-    | DeclFun (_, AbsStella.StellaIdent id, _, _, _, _, _) -> id = "main"
-    | _ -> false
-  in
-  List.fold_left (fun b obj -> b || isMain obj) false decls
+type context = (string * typeT) list
+
+let put (ctx : context) (s : string) (ty : typeT) : context = (s, ty) :: ctx
+
+let rec get (ctx : context) (s : string) : typeT option =
+  match ctx with
+  | (s', ty) :: ctx' -> if s = s' then Some ty else get ctx' s
+  | _ -> None
+
+let checkMain (ctx : context) : unit =
+  match get ctx "main" with None -> raise (TyExn MissingMain) | _ -> ()
 
 let typecheckProgram (program : program) =
   match program with
   | AProgram (_, _, decls) ->
-      if checkMain decls then () else raise (Failure "No main")
+      (* let context in  *)
+      let ctx =
+        List.fold_left
+          (fun a b ->
+            match b with
+            | DeclFun
+                (_, StellaIdent name, params, SomeReturnType tyReturn, _, _, _)
+              ->
+                let tyParams =
+                  List.map (fun (AParamDecl (name, tyParam)) -> tyParam) params
+                in
+                put a name (TypeFun (tyParams, tyReturn))
+            | _ -> a)
+          [] decls
+      in
+      checkMain ctx
 (* Printf.printf "typechecker is not implemented\n" *)
 
 let typecheck (expr : AbsStella.expr) (ty : AbsStella.typeT) =
