@@ -32,12 +32,15 @@ let main () =
     else print_string "Usage: stella [show|typecheck] {FILE}\n";
     flush stdout;
     exit 0
-  with BNFC_Util.Parse_error (start_pos, end_pos) ->
+  with 
+    | BNFC_Util.Parse_error (start_pos, end_pos) ->
     Printf.printf "Parse error at %d.%d-%d.%d\n" start_pos.pos_lnum
       (start_pos.pos_cnum - start_pos.pos_bol + 1)
       end_pos.pos_lnum
       (end_pos.pos_cnum - end_pos.pos_bol + 1);
     exit 1
+    | Typecheck.TyExn err ->
+      print_string (Typecheck.showError err)
 ;;
 
 main ()

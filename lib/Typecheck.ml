@@ -32,6 +32,13 @@ type tyError =
 
 exception TyExn of tyError
 
+let not_implemented () = raise (Failure "Not implemented")
+
+let showError (err : tyError) : string =
+  match err with
+  | MissingMain -> "ERROR_MISSING_MAIN\n  в программе отсутствует функция MAIN\n"
+  | _ -> not_implemented ()
+
 type context = (string * typeT) list
 
 let put (ctx : context) (s : string) (ty : typeT) : context = (s, ty) :: ctx
