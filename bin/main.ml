@@ -21,11 +21,15 @@ let showTree (t : AbsStella.program) : string =
 
 let main () =
   let channel =
-    if Array.length Sys.argv > 1 then open_in Sys.argv.(1) else stdin
+    if Array.length Sys.argv > 2 then open_in Sys.argv.(2) else stdin
   in
   try
-    print_string Sys.argv.(0);
-    Typecheck.typecheckProgram (parse channel);
+    if Array.length Sys.argv > 1 then
+      match Sys.argv.(1) with
+      | "typecheck" -> Typecheck.typecheckProgram (parse channel)
+      | "show" -> print_string (showTree (parse channel))
+      | _ -> print_string "Usage: stella [show|typecheck] {FILE}\n"
+    else print_string "Usage: stella [show|typecheck] {FILE}\n";
     flush stdout;
     exit 0
   with BNFC_Util.Parse_error (start_pos, end_pos) ->
