@@ -36,7 +36,8 @@ let not_implemented () = raise (Failure "Not implemented")
 
 let showError (err : tyError) : string =
   match err with
-  | MissingMain -> "ERROR_MISSING_MAIN\n  в программе отсутствует функция MAIN\n"
+  | MissingMain ->
+      "ERROR_MISSING_MAIN\n  в программе отсутствует функция main\n"
   | _ -> not_implemented ()
 
 type context = (string * typeT) list
@@ -54,7 +55,6 @@ let checkMain (ctx : context) : unit =
 let typecheckProgram (program : program) =
   match program with
   | AProgram (_, _, decls) ->
-      (* let context in  *)
       let ctx =
         List.fold_left
           (fun a b ->
@@ -66,11 +66,11 @@ let typecheckProgram (program : program) =
                   List.map (fun (AParamDecl (name, tyParam)) -> tyParam) params
                 in
                 put a name (TypeFun (tyParams, tyReturn))
-            | _ -> a)
+            | _ -> not_implemented ())
           [] decls
       in
-      checkMain ctx
-(* Printf.printf "typechecker is not implemented\n" *)
+      checkMain ctx;
+      List.fold_right (fun a b -> ()) ctx ()
 
 let typecheck (expr : AbsStella.expr) (ty : AbsStella.typeT) =
   Printf.printf "typechecker is not implemented\n"
