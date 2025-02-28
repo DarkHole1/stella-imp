@@ -15,8 +15,8 @@ type tyError =
   | UnexpectedVariant of typeT * expr
   | UnexpectedList of typeT * expr
   | UnexpectedInjection of typeT * expr
-  | MissingRecordFields
-  | UnexpectedRecordFields
+  | MissingRecordFields of string list * typeT * expr
+  | UnexpectedRecordFields of string list * typeT * expr
   | UnexpectedFieldAccess of typeT * string * expr
   | UnexpectedVariantLabel
   | TupleIndexOutOfBounds of typeT * int * expr
@@ -202,6 +202,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       typecheck ctx' expr' tyReturn
   | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
   | Variant _, TypeVariant _ ->
+      (* TODO: Not infer, check *)
       let ty' = infer ctx expr in
       if ty' != ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
