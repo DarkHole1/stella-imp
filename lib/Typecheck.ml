@@ -131,7 +131,6 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | Sequence (e1, e2), _ ->
       typecheck ctx e1 TypeUnit;
       typecheck ctx e2 ty
-  (* | Assign of expr * expr *)
   | If (eIf, eThen, eElse), _ ->
       typecheck ctx eIf TypeBool;
       typecheck ctx eThen ty;
@@ -185,7 +184,6 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       if ty != ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else typecheck ctx e1 ty'
-  (* TypeCast *)
   | Abstraction (params, expr'), TypeFun (tyParams, tyReturn) ->
       (* Check arity *)
       (* List.compare_lengths tyParams params = 0 *)
@@ -242,7 +240,6 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       typecheck ctx e2 TypeBool
   | LogicAnd _, _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
-  (* Ref, deref *)
   | Application _, _ ->
       let ty' = infer ctx expr in
       if ty' != ty then
@@ -292,7 +289,6 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       if ty' != ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else ()
-  (* Panic, throw, trycatch, trywith *)
   | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
   | Inl _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
   | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
@@ -312,7 +308,6 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       typecheck ctx eN TypeNat;
       typecheck ctx eN ty;
       typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)))
-  (* Fold, unfold *)
   | ConstTrue, TypeBool -> ()
   | ConstTrue, _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
@@ -325,7 +320,6 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | ConstInt _, TypeNat -> ()
   | ConstInt _, _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
-  (* ConstMemory *)
   | Var (StellaIdent name), _ -> (
       match get ctx name with
       | None -> raise (TyExn (UndefinedVariable (name, expr)))
@@ -342,7 +336,6 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
   | Sequence (e1, e2) ->
       typecheck ctx e1 TypeUnit;
       infer ctx e2
-  (* | Assign of expr * expr *)
   | If (eIf, eThen, eElse) ->
       typecheck ctx eIf TypeBool;
       let ty = infer ctx eThen in
@@ -358,7 +351,7 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       in
       let ctx' = List.concat [ bindersCtx; ctx ] in
       infer ctx' expr'
-  (* | LetRec of patternBinding list * expr <- requires PatternAsc not in grammar *)
+  (* | LetRec of patternBinding list * expr TODO *)
   | LessThan (e1, e2) ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat;
@@ -398,7 +391,6 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
   | TypeAsc (expr', ty) ->
       typecheck ctx expr' ty;
       ty
-  (* | TypeCast of expr * typeT not supported *)
   | Abstraction (params, expr') ->
       let ctx' = put_params ctx params in
       let tyReturn = infer ctx' expr' in
@@ -434,9 +426,6 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       typecheck ctx e1 TypeBool;
       typecheck ctx e2 TypeBool;
       TypeBool
-  (* Ref/deref not supported *)
-  (* | Ref of expr
-  | Deref of expr *)
   | Application (eFun, eArgs) -> (
       (* TODO: Incorrect arity *)
       let tyFun = infer ctx eFun in
@@ -493,10 +482,6 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       match ty with
       | TypeList tyElem -> TypeList tyElem
       | _ -> raise (TyExn (NotAList (ty, expr))))
-  (* | Panic
-  | Throw of expr
-  | TryCatch of expr * pattern * expr
-  | TryWith of expr * expr *)
   | Inl _ -> raise (TyExn (AmbiguousSumType expr))
   | Inr _ -> raise (TyExn (AmbiguousSumType expr))
   | Succ expr' ->
@@ -529,13 +514,10 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       let ty = infer ctx eN in
       typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)));
       ty
-  (* | Fold of typeT * expr
-  | Unfold of typeT * expr *)
   | ConstTrue -> TypeBool
   | ConstFalse -> TypeBool
   | ConstUnit -> TypeUnit
   | ConstInt _ -> TypeNat
-  (* | ConstMemory _ -> TODO *)
   | Var (StellaIdent name) -> (
       match get ctx name with
       | Some ty -> ty
