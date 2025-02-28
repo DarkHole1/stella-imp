@@ -14,7 +14,7 @@ type tyError =
   | UnexpectedRecord of typeT * expr
   | UnexpectedVariant of typeT * expr
   | UnexpectedList of typeT * expr
-  | UnexpectedInjection
+  | UnexpectedInjection of typeT * expr
   | MissingRecordFields
   | UnexpectedRecordFields
   | UnexpectedFieldAccess of typeT * string * expr
@@ -136,7 +136,17 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       typecheck ctx eIf TypeBool;
       typecheck ctx eThen ty;
       typecheck ctx eElse ty
-  (* Let, LetRec *)
+  | Let (binders, expr'), _ ->
+      (* TODO: check semantics *)
+      let bindersCtx =
+        List.concat_map
+          (fun (APatternBinding (p, expr'')) ->
+            dePatternBinder p (infer ctx expr''))
+          binders
+      in
+      let ctx' = List.concat [ bindersCtx; ctx ] in
+      typecheck ctx' expr' ty
+  (* LetRec TODO *)
   | LessThan (e1, e2), TypeBool ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
@@ -157,7 +167,20 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       typecheck ctx e2 TypeNat
   | GreaterThanOrEqual (e1, e2), _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
-  (* Equal, NotEqual (requires infer) *)
+  | Equal _, TypeBool ->
+      let ty' = infer ctx expr in
+      if ty = ty' then ()
+      else raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      (* Never gonna happens *)
+  | Equal _, _ ->
+      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+  | NotEqual _, TypeBool ->
+      let ty' = infer ctx expr in
+      if ty = ty' then ()
+      else raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      (* Never gonna happens *)
+  | NotEqual _, _ ->
+      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
   | TypeAsc (e1, ty'), _ ->
       if ty != ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
@@ -178,7 +201,17 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       let ctx' = put_params ctx params in
       typecheck ctx' expr' tyReturn
   | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
-  (* Variant, Match, List *)
+  | Variant _, TypeVariant _ ->
+      let ty' = infer ctx expr in
+      if ty' != ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      else ()
+  (* Match TODO *)
+  | List _, TypeList _ ->
+      let ty' = infer ctx expr in
+      if ty' != ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      else ()
   | Add (e1, e2), TypeNat ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
@@ -209,7 +242,21 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | LogicAnd _, _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
   (* Ref, deref *)
-  (* | Application, DotRecord, DotTuple requires infer *)
+  | Application _, _ ->
+      let ty' = infer ctx expr in
+      if ty' != ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      else ()
+  | DotRecord _, _ ->
+      let ty' = infer ctx expr in
+      if ty' != ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      else ()
+  | DotTuple _, _ ->
+      let ty' = infer ctx expr in
+      if ty' != ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      else ()
   | Tuple exprs, TypeTuple tyExprs ->
       if List.compare_lengths exprs tyExprs != 0 then () (* TODO: Error *)
       else
@@ -218,21 +265,37 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
           ()
           (List.combine exprs tyExprs)
   | Tuple _, _ -> raise (TyExn (UnexpectedTuple (ty, expr)))
-  (* TODO *)
-  (* | Record bindings, TypeRecord tyFields -> ()
-  | Record _, _ -> raise (TyExn (UnexpectedRecord (ty, expr))) *)
+  | Record _, TypeRecord _ ->
+      (* TODO missing / unexpected record fields *)
+      let ty' = infer ctx expr in
+      if ty' != ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      else ()
+  | Record _, _ -> raise (TyExn (UnexpectedRecord (ty, expr)))
   | ConsList (e1, e2), TypeList ty' ->
       typecheck ctx e1 ty';
       typecheck ctx e2 ty
   | ConsList _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
-  (* | Head expr', TypeList ty' -> ()
-  | Head _, _ -> raise (TyExn (NotAList (ty, expr))) *)
-  (* Head, Tail, IsEmpty requires infer *)
+  | Head _, _ ->
+      let ty' = infer ctx expr in
+      if ty' != ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      else ()
+  | Tail _, _ ->
+      let ty' = infer ctx expr in
+      if ty' != ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      else ()
+  | IsEmpty _, _ ->
+      let ty' = infer ctx expr in
+      if ty' != ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+      else ()
   (* Panic, throw, trycatch, trywith *)
   | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
-  | Inl _, _ -> () (* TODO *)
+  | Inl _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
   | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
-  | Inr _, _ -> () (* TODO *)
+  | Inr _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
   | Succ expr', TypeNat -> typecheck ctx expr' TypeNat
   | Succ _, _ -> raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
   | LogicNot expr', TypeBool -> typecheck ctx expr' TypeBool
@@ -317,12 +380,16 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
         | TypeFun _ ->
             not_implemented () (* TODO: More appropriate error for function *)
         | _ -> TypeBool)
-  | NotEqual (e1, e2) ->
+  | NotEqual (e1, e2) -> (
       let ty1 = infer ctx e1 in
       let ty2 = infer ctx e2 in
       if ty1 != ty2 then
         raise (TyExn (UnexpectedTypeOfExpression (ty1, ty2, expr)))
-      else TypeBool
+      else
+        match ty1 with
+        | TypeFun _ ->
+            not_implemented () (* TODO: More appropriate error for function *)
+        | _ -> TypeBool)
   | TypeAsc (expr', ty) ->
       typecheck ctx expr' ty;
       ty
