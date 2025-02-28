@@ -8,7 +8,7 @@ type tyError =
   | NotATuple of typeT * expr
   | NotARecord of typeT * expr
   | NotAList of typeT * expr
-  | UnexpectedLambda of expr
+  | UnexpectedLambda of typeT * expr
   | UnexpectedTypeForParameter of typeT * typeT * paramDecl
   | UnexpectedTuple of typeT * expr
   | UnexpectedRecord of typeT * expr
@@ -37,7 +37,69 @@ let not_implemented () = raise (Failure "Not implemented")
 let showError (err : tyError) : string =
   match err with
   | MissingMain ->
-      "ERROR_MISSING_MAIN\n  в программе отсутствует функция main\n"
+      "ERROR_MISSING_MAIN\n  в программе отсутствует функция main"
+  | UndefinedVariable (name, expr) ->
+      "ERROR_UNDEFINED_VARIABLE\n  неизвестная переменная\n    " ^ name
+      ^ "\n  в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedTypeOfExpression (ty1, ty2, expr) ->
+      "ERROR_UNEXPECTED_TYPE_OF_EXPRESSION\n  ожидался тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty1
+      ^ "\n  но получен тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty2
+      ^ "\n  в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | NotAFunction (ty, expr) ->
+      "ERROR_NOT_A_FUNCTION\n  ожидалась функция в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ "\n  но получен тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+  | NotATuple (ty, expr) ->
+      "ERROR_NOT_A_TUPLE\n  ожидался кортёж в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ "\n  но получен тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+  | NotARecord (ty, expr) ->
+      "ERROR_NOT_A_RECORD\n  ожидалась запись в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ "\n  но получен тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+  | NotAList (ty, expr) ->
+      "ERROR_NOT_A_LIST\n  ожидался список в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ "\n  но получен тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+  | UnexpectedLambda (ty, expr) ->
+      "ERROR_UNEXPECTED_LAMBDA\n  ожидался тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  но получена лямбда в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedTypeForParameter (ty1, ty2, AParamDecl (StellaIdent name, _)) ->
+      "ERROR_UNEXPECTED_TYPE_FOR_PARAMETER\n  для параметра\n    " ^ name
+      ^ "\n  ожидался тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty1
+      ^ "\n  но получен тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty2
+  | UnexpectedTuple (ty, expr) ->
+      "ERROR_UNEXPECTED_TUPLE\n  ожидался тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  но получен кортёж в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedRecord (ty, expr) ->
+      "ERROR_UNEXPECTED_RECORD\n  ожидался тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  но получена запись в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedVariant (ty, expr) ->
+      "ERROR_UNEXPECTED_VARIANT\n  ожидался тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  но получен вариант в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedList (ty, expr) ->
+      "ERROR_UNEXPECTED_LIST\n  ожидался тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  но получен список в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
   | _ -> not_implemented ()
 
 type context = (string * typeT) list
@@ -110,7 +172,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
         (List.combine tyParams params);
       let ctx' = put_params ctx params in
       typecheck ctx' expr' tyReturn
-  | Abstraction _, _ -> raise (TyExn (UnexpectedLambda expr))
+  | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
   (* Variant, Match, List *)
   | Add (e1, e2), TypeNat ->
       typecheck ctx e1 TypeNat;
@@ -198,7 +260,9 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
           if ty != ty' then
             raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
           else ())
-  | _ -> not_implemented ()
+  | a, _ ->
+      print_endline (ShowStella.show (ShowStella.showExpr a));
+      not_implemented ()
 
 let typecheckProgram (program : program) =
   match program with
