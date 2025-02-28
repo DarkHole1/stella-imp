@@ -308,6 +308,10 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | IsZero _, _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
   | Fix expr', _ -> typecheck ctx expr' (TypeFun ([ ty ], ty))
+  | NatRec (eN, eZ, eS), _ ->
+      typecheck ctx eN TypeNat;
+      typecheck ctx eN ty;
+      typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)))
   (* Fold, unfold *)
   | ConstTrue, TypeBool -> ()
   | ConstTrue, _ ->
@@ -508,7 +512,11 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       typecheck ctx expr' TypeNat;
       TypeBool
   (* | Fix of expr TODO *)
-  (* | NatRec of expr * expr * expr TODO *)
+  | NatRec (eN, eZ, eS) ->
+      typecheck ctx eN TypeNat;
+      let ty = infer ctx eN in
+      typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)));
+      ty
   (* | Fold of typeT * expr
   | Unfold of typeT * expr *)
   | ConstTrue -> TypeBool
