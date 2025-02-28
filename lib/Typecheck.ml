@@ -511,7 +511,19 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
   | IsZero expr' ->
       typecheck ctx expr' TypeNat;
       TypeBool
-  (* | Fix of expr TODO *)
+  | Fix expr' -> (
+      let ty = infer ctx expr' in
+      match ty with
+      | TypeFun ([ tyArg ], tyRet) ->
+          if tyArg != tyRet then
+            raise
+              (TyExn
+                 (UnexpectedTypeOfExpression
+                    ( TypeFun ([ tyArg ], tyArg),
+                      TypeFun ([ tyArg ], tyRet),
+                      expr )))
+          else ty
+      | _ -> raise (TyExn (NotAFunction (ty, expr))))
   | NatRec (eN, eZ, eS) ->
       typecheck ctx eN TypeNat;
       let ty = infer ctx eN in
