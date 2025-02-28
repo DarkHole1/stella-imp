@@ -17,12 +17,13 @@ type tyError =
   | UnexpectedInjection
   | MissingRecordFields
   | UnexpectedRecordFields
-  | UnexpectedFieldAccess
+  | UnexpectedFieldAccess of typeT * string * expr
   | UnexpectedVariantLabel
-  | TupleIndexOutOfBounds
+  | TupleIndexOutOfBounds of typeT * int * expr
   | UnexpectedTupleLength
-  | AmbiguousSumType
-  | AmbiguousList
+  | AmbiguousSumType of expr
+  | AmbiguousVariantType of expr
+  | AmbiguousList of expr
   | IllegalEmptyMatching
   | NonexhaustiveMatchPatterns
   | UnexpectedPatternForType
@@ -36,8 +37,7 @@ let not_implemented () = raise (Failure "Not implemented")
 
 let showError (err : tyError) : string =
   match err with
-  | MissingMain ->
-      "ERROR_MISSING_MAIN\n  в программе отсутствует функция main"
+  | MissingMain -> "ERROR_MISSING_MAIN\n  в программе отсутствует функция main"
   | UndefinedVariable (name, expr) ->
       "ERROR_UNDEFINED_VARIABLE\n  неизвестная переменная\n    " ^ name
       ^ "\n  в выражении\n    "
@@ -120,6 +120,11 @@ let rec get (ctx : context) (s : string) : typeT option =
 
 let checkMain (ctx : context) : unit =
   match get ctx "main" with None -> raise (TyExn MissingMain) | _ -> ()
+
+let dePatternBinder (p : pattern) (ty : typeT) : context =
+  match p with
+  | PatternVar (StellaIdent name) -> [ (name, ty) ]
+  | _ -> not_implemented ()
 
 let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   match (expr, ty) with
@@ -264,6 +269,191 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       print_endline (ShowStella.show (ShowStella.showExpr a));
       not_implemented ()
 
+and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
+  match expr with
+  | Sequence (e1, e2) ->
+      typecheck ctx e1 TypeUnit;
+      infer ctx e2
+  (* | Assign of expr * expr *)
+  | If (eIf, eThen, eElse) ->
+      typecheck ctx eIf TypeBool;
+      let ty = infer ctx eThen in
+      typecheck ctx eElse ty;
+      ty
+  | Let (binders, expr') ->
+      (* TODO check semantics of let a = ..., b = a <- impossible in such tc *)
+      let bindersCtx =
+        List.concat_map
+          (fun (APatternBinding (p, expr'')) ->
+            dePatternBinder p (infer ctx expr''))
+          binders
+      in
+      let ctx' = List.concat [ bindersCtx; ctx ] in
+      infer ctx' expr'
+  (* | LetRec of patternBinding list * expr <- requires PatternAsc not in grammar *)
+  | LessThan (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeBool
+  | LessThanOrEqual (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeBool
+  | GreaterThan (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeBool
+  | GreaterThanOrEqual (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeBool
+  | Equal (e1, e2) -> (
+      let ty1 = infer ctx e1 in
+      let ty2 = infer ctx e2 in
+      if ty1 != ty2 then
+        raise (TyExn (UnexpectedTypeOfExpression (ty1, ty2, expr)))
+      else
+        match ty1 with
+        | TypeFun _ ->
+            not_implemented () (* TODO: More appropriate error for function *)
+        | _ -> TypeBool)
+  | NotEqual (e1, e2) ->
+      let ty1 = infer ctx e1 in
+      let ty2 = infer ctx e2 in
+      if ty1 != ty2 then
+        raise (TyExn (UnexpectedTypeOfExpression (ty1, ty2, expr)))
+      else TypeBool
+  | TypeAsc (expr', ty) ->
+      typecheck ctx expr' ty;
+      ty
+  (* | TypeCast of expr * typeT not supported *)
+  | Abstraction (params, expr') ->
+      let ctx' = put_params ctx params in
+      let tyReturn = infer ctx' expr' in
+      TypeFun (List.map (fun (AParamDecl (_, ty)) -> ty) params, tyReturn)
+  | Variant _ -> raise (TyExn (AmbiguousVariantType expr))
+  (* | Match of expr * matchCase list TODO: PM is hard *)
+  | List (expr' :: exprs) ->
+      let ty = infer ctx expr' in
+      List.iter (fun expr'' -> typecheck ctx expr'' ty) exprs;
+      ty
+  | List [] -> raise (TyExn (AmbiguousList expr))
+  | Add (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeNat
+  | Subtract (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeNat
+  | LogicOr (e1, e2) ->
+      typecheck ctx e1 TypeBool;
+      typecheck ctx e2 TypeBool;
+      TypeBool
+  | Multiply (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeNat
+  | Divide (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeNat
+  | LogicAnd (e1, e2) ->
+      typecheck ctx e1 TypeBool;
+      typecheck ctx e2 TypeBool;
+      TypeBool
+  (* Ref/deref not supported *)
+  (* | Ref of expr
+  | Deref of expr *)
+  | Application (eFun, eArgs) -> (
+      (* TODO: Incorrect arity *)
+      let tyFun = infer ctx eFun in
+      match tyFun with
+      | TypeFun (tyArgs, tyReturn) ->
+          List.iter
+            (fun (eArg, tyArg) -> typecheck ctx eArg tyArg)
+            (List.combine eArgs tyArgs);
+          tyReturn
+      | _ -> raise (TyExn (NotAFunction (tyFun, expr))))
+  | DotRecord (expr', StellaIdent name) -> (
+      let tyRec = infer ctx expr' in
+      match tyRec with
+      | TypeRecord fields ->
+          let rec find_field (fields : recordFieldType list) =
+            match fields with
+            | ARecordFieldType (StellaIdent name', tyField) :: fields' ->
+                if name' = name then tyField else find_field fields'
+            | [] -> raise (TyExn (UnexpectedFieldAccess (tyRec, name, expr)))
+          in
+          find_field fields
+      | _ -> raise (TyExn (NotARecord (tyRec, expr))))
+  | DotTuple (expr, n) -> (
+      let ty = infer ctx expr in
+      match ty with
+      | TypeTuple tyTuple ->
+          if List.compare_length_with tyTuple n > 0 || n <= 0 then
+            raise (TyExn (TupleIndexOutOfBounds (ty, n, expr)))
+          else List.nth tyTuple (n + 1)
+      | _ -> raise (TyExn (NotATuple (ty, expr))))
+  | Tuple exprs -> TypeTuple (List.map (infer ctx) exprs)
+  | Record bindings ->
+      TypeRecord
+        (List.map
+           (fun (ABinding (ident, expr)) ->
+             ARecordFieldType (ident, infer ctx expr))
+           bindings)
+  | ConsList (eHead, eTail) ->
+      let ty = infer ctx eHead in
+      typecheck ctx eTail (TypeList ty);
+      TypeList ty
+  | Head expr' -> (
+      let ty = infer ctx expr' in
+      match ty with
+      | TypeList tyElem -> tyElem
+      | _ -> raise (TyExn (NotAList (ty, expr))))
+  | IsEmpty expr' -> (
+      let ty = infer ctx expr' in
+      match ty with
+      | TypeList _ -> TypeBool
+      | _ -> raise (TyExn (NotAList (ty, expr))))
+  | Tail expr' -> (
+      let ty = infer ctx expr' in
+      match ty with
+      | TypeList tyElem -> TypeList tyElem
+      | _ -> raise (TyExn (NotAList (ty, expr))))
+  (* | Panic
+  | Throw of expr
+  | TryCatch of expr * pattern * expr
+  | TryWith of expr * expr *)
+  | Inl _ -> raise (TyExn (AmbiguousSumType expr))
+  | Inr _ -> raise (TyExn (AmbiguousSumType expr))
+  | Succ expr' ->
+      typecheck ctx expr' TypeNat;
+      TypeNat
+  | LogicNot expr' ->
+      typecheck ctx expr' TypeBool;
+      TypeBool
+  | Pred expr' ->
+      typecheck ctx expr' TypeNat;
+      TypeNat
+  | IsZero expr' ->
+      typecheck ctx expr' TypeNat;
+      TypeBool
+  (* | Fix of expr TODO *)
+  (* | NatRec of expr * expr * expr TODO *)
+  (* | Fold of typeT * expr
+  | Unfold of typeT * expr *)
+  | ConstTrue -> TypeBool
+  | ConstFalse -> TypeBool
+  | ConstUnit -> TypeUnit
+  | ConstInt _ -> TypeNat
+  (* | ConstMemory _ -> TODO *)
+  | Var (StellaIdent name) -> (
+      match get ctx name with
+      | Some ty -> ty
+      | None -> raise (TyExn (UndefinedVariable (name, expr))))
+  | _ -> not_implemented ()
+
 let typecheckProgram (program : program) =
   match program with
   | AProgram (_, _, decls) ->
@@ -292,8 +482,3 @@ let typecheckProgram (program : program) =
               typecheck ctx' expr tyReturn
           | _ -> not_implemented ())
         () decls
-
-(*
-let infer (expr : AbsStella.expr) : AbsStella.typeT =
-  Printf.printf "typechecker is not implemented\n"
-*)
