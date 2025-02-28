@@ -87,6 +87,26 @@ and showDecl (e : AbsStella.decl) : showable =
       >> s2s ", " >> showReturnType returntype >> s2s ", "
       >> showThrowType throwtype >> s2s ", " >> showList showDecl decls
       >> s2s ", " >> showExpr expr >> c2s ')'
+  | AbsStella.DeclFunGeneric
+      ( annotations,
+        stellaident,
+        stellaidents,
+        paramdecls,
+        returntype,
+        throwtype,
+        decls,
+        expr ) ->
+      s2s "DeclFunGeneric" >> c2s ' ' >> c2s '('
+      >> showList showAnnotation annotations
+      >> s2s ", "
+      >> showStellaIdent stellaident
+      >> s2s ", "
+      >> showList showStellaIdent stellaidents
+      >> s2s ", "
+      >> showList showParamDecl paramdecls
+      >> s2s ", " >> showReturnType returntype >> s2s ", "
+      >> showThrowType throwtype >> s2s ", " >> showList showDecl decls
+      >> s2s ", " >> showExpr expr >> c2s ')'
   | AbsStella.DeclTypeAlias (stellaident, type') ->
       s2s "DeclTypeAlias" >> c2s ' ' >> c2s '('
       >> showStellaIdent stellaident
@@ -129,8 +149,13 @@ and showThrowType (e : AbsStella.throwType) : showable =
 
 and showTypeT (e : AbsStella.typeT) : showable =
   match e with
+  | AbsStella.TypeAuto -> s2s "TypeAuto"
   | AbsStella.TypeFun (types, type') ->
       s2s "TypeFun" >> c2s ' ' >> c2s '(' >> showList showTypeT types
+      >> s2s ", " >> showTypeT type' >> c2s ')'
+  | AbsStella.TypeForAll (stellaidents, type') ->
+      s2s "TypeForAll" >> c2s ' ' >> c2s '('
+      >> showList showStellaIdent stellaidents
       >> s2s ", " >> showTypeT type' >> c2s ')'
   | AbsStella.TypeRec (stellaident, type') ->
       s2s "TypeRec" >> c2s ' ' >> c2s '('
@@ -191,6 +216,12 @@ and showExprData (e : AbsStella.exprData) : showable =
 
 and showPattern (e : AbsStella.pattern) : showable =
   match e with
+  | AbsStella.PatternCastAs (pattern, type') ->
+      s2s "PatternCastAs" >> c2s ' ' >> c2s '(' >> showPattern pattern
+      >> s2s ", " >> showTypeT type' >> c2s ')'
+  | AbsStella.PatternAsc (pattern, type') ->
+      s2s "PatternAsc" >> c2s ' ' >> c2s '(' >> showPattern pattern >> s2s ", "
+      >> showTypeT type' >> c2s ')'
   | AbsStella.PatternVariant (stellaident, patterndata) ->
       s2s "PatternVariant" >> c2s ' ' >> c2s '('
       >> showStellaIdent stellaident
@@ -261,6 +292,10 @@ and showExpr (e : AbsStella.expr) : showable =
       s2s "LetRec" >> c2s ' ' >> c2s '('
       >> showList showPatternBinding patternbindings
       >> s2s ", " >> showExpr expr >> c2s ')'
+  | AbsStella.TypeAbstraction (stellaidents, expr) ->
+      s2s "TypeAbstraction" >> c2s ' ' >> c2s '('
+      >> showList showStellaIdent stellaidents
+      >> s2s ", " >> showExpr expr >> c2s ')'
   | AbsStella.LessThan (expr0, expr) ->
       s2s "LessThan" >> c2s ' ' >> c2s '(' >> showExpr expr0 >> s2s ", "
       >> showExpr expr >> c2s ')'
@@ -324,6 +359,9 @@ and showExpr (e : AbsStella.expr) : showable =
   | AbsStella.Application (expr, exprs) ->
       s2s "Application" >> c2s ' ' >> c2s '(' >> showExpr expr >> s2s ", "
       >> showList showExpr exprs >> c2s ')'
+  | AbsStella.TypeApplication (expr, types) ->
+      s2s "TypeApplication" >> c2s ' ' >> c2s '(' >> showExpr expr >> s2s ", "
+      >> showList showTypeT types >> c2s ')'
   | AbsStella.DotRecord (expr, stellaident) ->
       s2s "DotRecord" >> c2s ' ' >> c2s '(' >> showExpr expr >> s2s ", "
       >> showStellaIdent stellaident
@@ -355,6 +393,10 @@ and showExpr (e : AbsStella.expr) : showable =
   | AbsStella.TryWith (expr0, expr) ->
       s2s "TryWith" >> c2s ' ' >> c2s '(' >> showExpr expr0 >> s2s ", "
       >> showExpr expr >> c2s ')'
+  | AbsStella.TryCastAs (expr0, type', pattern, expr1, expr) ->
+      s2s "TryCastAs" >> c2s ' ' >> c2s '(' >> showExpr expr0 >> s2s ", "
+      >> showTypeT type' >> s2s ", " >> showPattern pattern >> s2s ", "
+      >> showExpr expr1 >> s2s ", " >> showExpr expr >> c2s ')'
   | AbsStella.Inl expr ->
       s2s "Inl" >> c2s ' ' >> c2s '(' >> showExpr expr >> c2s ')'
   | AbsStella.Inr expr ->

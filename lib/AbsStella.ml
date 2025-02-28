@@ -16,6 +16,15 @@ and decl =
       * throwType
       * decl list
       * expr
+  | DeclFunGeneric of
+      annotation list
+      * stellaIdent
+      * stellaIdent list
+      * paramDecl list
+      * returnType
+      * throwType
+      * decl list
+      * expr
   | DeclTypeAlias of stellaIdent * typeT
   | DeclExceptionType of typeT
   | DeclExceptionVariant of stellaIdent * typeT
@@ -27,7 +36,9 @@ and returnType = NoReturnType | SomeReturnType of typeT
 and throwType = NoThrowType | SomeThrowType of typeT list
 
 and typeT =
+  | TypeAuto
   | TypeFun of typeT list * typeT
+  | TypeForAll of stellaIdent list * typeT
   | TypeRec of stellaIdent * typeT
   | TypeSum of typeT * typeT
   | TypeTuple of typeT list
@@ -48,6 +59,8 @@ and patternData = NoPatternData | SomePatternData of pattern
 and exprData = NoExprData | SomeExprData of expr
 
 and pattern =
+  | PatternCastAs of pattern * typeT
+  | PatternAsc of pattern * typeT
   | PatternVariant of stellaIdent * patternData
   | PatternInl of pattern
   | PatternInr of pattern
@@ -71,6 +84,7 @@ and expr =
   | If of expr * expr * expr
   | Let of patternBinding list * expr
   | LetRec of patternBinding list * expr
+  | TypeAbstraction of stellaIdent list * expr
   | LessThan of expr * expr
   | LessThanOrEqual of expr * expr
   | GreaterThan of expr * expr
@@ -92,6 +106,7 @@ and expr =
   | Ref of expr
   | Deref of expr
   | Application of expr * expr list
+  | TypeApplication of expr * typeT list
   | DotRecord of expr * stellaIdent
   | DotTuple of expr * int
   | Tuple of expr list
@@ -104,6 +119,7 @@ and expr =
   | Throw of expr
   | TryCatch of expr * pattern * expr
   | TryWith of expr * expr
+  | TryCastAs of expr * typeT * pattern * expr * expr
   | Inl of expr
   | Inr of expr
   | Succ of expr
@@ -125,3 +141,7 @@ and patternBinding = APatternBinding of pattern * expr
 and variantFieldType = AVariantFieldType of stellaIdent * optionalTyping
 and recordFieldType = ARecordFieldType of stellaIdent * typeT
 and typing = ATyping of expr * typeT
+
+(* defined constructors *)
+
+let patternCons (h, t) = PatternCons (h, t)

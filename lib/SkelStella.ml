@@ -36,6 +36,16 @@ module SkelStella = struct
           decls,
           expr ) ->
         failure x
+    | DeclFunGeneric
+        ( annotations,
+          stellaident,
+          stellaidents,
+          paramdecls,
+          returntype,
+          throwtype,
+          decls,
+          expr ) ->
+        failure x
     | DeclTypeAlias (stellaident, type') -> failure x
     | DeclExceptionType type' -> failure x
     | DeclExceptionVariant (stellaident, type') -> failure x
@@ -57,7 +67,9 @@ module SkelStella = struct
 
   and transType (x : typeT) : result =
     match x with
+    | TypeAuto -> failure x
     | TypeFun (types, type') -> failure x
+    | TypeForAll (stellaidents, type') -> failure x
     | TypeRec (stellaident, type') -> failure x
     | TypeSum (type'0, type') -> failure x
     | TypeTuple types -> failure x
@@ -88,6 +100,8 @@ module SkelStella = struct
 
   and transPattern (x : pattern) : result =
     match x with
+    | PatternCastAs (pattern, type') -> failure x
+    | PatternAsc (pattern, type') -> failure x
     | PatternVariant (stellaident, patterndata) -> failure x
     | PatternInl pattern -> failure x
     | PatternInr pattern -> failure x
@@ -115,6 +129,7 @@ module SkelStella = struct
     | If (expr0, expr1, expr) -> failure x
     | Let (patternbindings, expr) -> failure x
     | LetRec (patternbindings, expr) -> failure x
+    | TypeAbstraction (stellaidents, expr) -> failure x
     | LessThan (expr0, expr) -> failure x
     | LessThanOrEqual (expr0, expr) -> failure x
     | GreaterThan (expr0, expr) -> failure x
@@ -136,6 +151,7 @@ module SkelStella = struct
     | Ref expr -> failure x
     | Deref expr -> failure x
     | Application (expr, exprs) -> failure x
+    | TypeApplication (expr, types) -> failure x
     | DotRecord (expr, stellaident) -> failure x
     | DotTuple (expr, integer) -> failure x
     | Tuple exprs -> failure x
@@ -148,6 +164,7 @@ module SkelStella = struct
     | Throw expr -> failure x
     | TryCatch (expr0, pattern, expr) -> failure x
     | TryWith (expr0, expr) -> failure x
+    | TryCastAs (expr0, type', pattern, expr1, expr) -> failure x
     | Inl expr -> failure x
     | Inr expr -> failure x
     | Succ expr -> failure x

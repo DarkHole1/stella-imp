@@ -152,6 +152,36 @@ and prtDecl (i : int) (e : AbsStella.decl) : doc =
              prtExpr 0 expr;
              render "}";
            ])
+  | AbsStella.DeclFunGeneric
+      ( annotations,
+        stellaident,
+        stellaidents,
+        paramdecls,
+        returntype,
+        throwtype,
+        decls,
+        expr ) ->
+      prPrec i 0
+        (concatD
+           [
+             prtAnnotationListBNFC 0 annotations;
+             render "generic";
+             render "fn";
+             prtStellaIdent 0 stellaident;
+             render "[";
+             prtStellaIdentListBNFC 0 stellaidents;
+             render "]";
+             render "(";
+             prtParamDeclListBNFC 0 paramdecls;
+             render ")";
+             prtReturnType 0 returntype;
+             prtThrowType 0 throwtype;
+             render "{";
+             prtDeclListBNFC 0 decls;
+             render "return";
+             prtExpr 0 expr;
+             render "}";
+           ])
   | AbsStella.DeclTypeAlias (stellaident, type_) ->
       prPrec i 0
         (concatD
@@ -227,6 +257,7 @@ and prtThrowType (i : int) (e : AbsStella.throwType) : doc =
 
 and prtTypeT (i : int) (e : AbsStella.typeT) : doc =
   match e with
+  | AbsStella.TypeAuto -> prPrec i 0 (concatD [ render "auto" ])
   | AbsStella.TypeFun (types, type_) ->
       prPrec i 0
         (concatD
@@ -236,6 +267,15 @@ and prtTypeT (i : int) (e : AbsStella.typeT) : doc =
              prtTypeTListBNFC 0 types;
              render ")";
              render "->";
+             prtTypeT 0 type_;
+           ])
+  | AbsStella.TypeForAll (stellaidents, type_) ->
+      prPrec i 0
+        (concatD
+           [
+             render "forall";
+             prtStellaIdentListBNFC 0 stellaidents;
+             render ".";
              prtTypeT 0 type_;
            ])
   | AbsStella.TypeRec (stellaident, type_) ->
@@ -319,6 +359,15 @@ and prtExprData (i : int) (e : AbsStella.exprData) : doc =
 
 and prtPattern (i : int) (e : AbsStella.pattern) : doc =
   match e with
+  | AbsStella.PatternCastAs (pattern, type_) ->
+      prPrec i 0
+        (concatD
+           [
+             prtPattern 0 pattern; render "cast"; render "as"; prtTypeT 0 type_;
+           ])
+  | AbsStella.PatternAsc (pattern, type_) ->
+      prPrec i 0
+        (concatD [ prtPattern 0 pattern; render "as"; prtTypeT 0 type_ ])
   | AbsStella.PatternVariant (stellaident, patterndata) ->
       prPrec i 0
         (concatD
@@ -352,6 +401,7 @@ and prtPattern (i : int) (e : AbsStella.pattern) : doc =
       prPrec i 0
         (concatD
            [
+             render "cons";
              render "(";
              prtPattern 0 pattern1;
              render ",";
@@ -439,6 +489,16 @@ and prtExpr (i : int) (e : AbsStella.expr) : doc =
              render "in";
              prtExpr 0 expr;
            ])
+  | AbsStella.TypeAbstraction (stellaidents, expr) ->
+      prPrec i 0
+        (concatD
+           [
+             render "generic";
+             render "[";
+             prtStellaIdentListBNFC 0 stellaidents;
+             render "]";
+             prtExpr 0 expr;
+           ])
   | AbsStella.LessThan (expr1, expr2) ->
       prPrec i 2 (concatD [ prtExpr 3 expr1; render "<"; prtExpr 3 expr2 ])
   | AbsStella.LessThanOrEqual (expr1, expr2) ->
@@ -505,12 +565,16 @@ and prtExpr (i : int) (e : AbsStella.expr) : doc =
       prPrec i 4 (concatD [ prtExpr 4 expr1; render "and"; prtExpr 5 expr2 ])
   | AbsStella.Ref expr ->
       prPrec i 5
-        (concatD [ render "new"; render "("; prtExpr 5 expr; render ")" ])
+        (concatD [ render "new"; render "("; prtExpr 0 expr; render ")" ])
   | AbsStella.Deref expr -> prPrec i 5 (concatD [ render "*"; prtExpr 5 expr ])
   | AbsStella.Application (expr, exprs) ->
       prPrec i 6
         (concatD
            [ prtExpr 6 expr; render "("; prtExprListBNFC 0 exprs; render ")" ])
+  | AbsStella.TypeApplication (expr, types) ->
+      prPrec i 6
+        (concatD
+           [ prtExpr 6 expr; render "["; prtTypeTListBNFC 0 types; render "]" ])
   | AbsStella.DotRecord (expr, stellaident) ->
       prPrec i 6
         (concatD [ prtExpr 6 expr; render "."; prtStellaIdent 0 stellaident ])
@@ -574,6 +638,27 @@ and prtExpr (i : int) (e : AbsStella.expr) : doc =
              render "with";
              render "{";
              prtExpr 0 expr2;
+             render "}";
+           ])
+  | AbsStella.TryCastAs (expr1, type_, pattern, expr2, expr3) ->
+      prPrec i 6
+        (concatD
+           [
+             render "try";
+             render "{";
+             prtExpr 0 expr1;
+             render "}";
+             render "cast";
+             render "as";
+             prtTypeT 0 type_;
+             render "{";
+             prtPattern 0 pattern;
+             render "=>";
+             prtExpr 0 expr2;
+             render "}";
+             render "with";
+             render "{";
+             prtExpr 0 expr3;
              render "}";
            ])
   | AbsStella.Inl expr ->

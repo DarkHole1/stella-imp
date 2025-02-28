@@ -9,11 +9,11 @@ open Lexing
 
 let symbol_table = Hashtbl.create 36
 let _ = List.iter (fun (kwd, tok) -> Hashtbl.add symbol_table kwd tok)
-                  [("µ", SYMB1);(",", SYMB2);(";", SYMB3);("(", SYMB4);(")", SYMB5);("{", SYMB6);("}", SYMB7);("=", SYMB8);(":", SYMB9);("->", SYMB10);("=>", SYMB11);("|", SYMB12);("<|", SYMB13);("|>", SYMB14);("[", SYMB15);("]", SYMB16);(":=", SYMB17);("<", SYMB18);("<=", SYMB19);(">", SYMB20);(">=", SYMB21);("==", SYMB22);("!=", SYMB23);("+", SYMB24);("-", SYMB25);("*", SYMB26);("/", SYMB27);(".", SYMB28);("List::head", SYMB29);("List::isempty", SYMB30);("List::tail", SYMB31);("panic!", SYMB32);("Nat::pred", SYMB33);("Nat::iszero", SYMB34);("Nat::rec", SYMB35);("&", SYMB36)]
+                  [("µ", SYMB1);(",", SYMB2);(";", SYMB3);("(", SYMB4);(")", SYMB5);("{", SYMB6);("}", SYMB7);("[", SYMB8);("]", SYMB9);("=", SYMB10);(":", SYMB11);("->", SYMB12);("=>", SYMB13);("|", SYMB14);("<|", SYMB15);("|>", SYMB16);(":=", SYMB17);("<", SYMB18);("<=", SYMB19);(">", SYMB20);(">=", SYMB21);("==", SYMB22);("!=", SYMB23);("+", SYMB24);("-", SYMB25);("*", SYMB26);("/", SYMB27);(".", SYMB28);("List::head", SYMB29);("List::isempty", SYMB30);("List::tail", SYMB31);("panic!", SYMB32);("Nat::pred", SYMB33);("Nat::iszero", SYMB34);("Nat::rec", SYMB35);("&", SYMB36)]
 
-let resword_table = Hashtbl.create 42
+let resword_table = Hashtbl.create 45
 let _ = List.iter (fun (kwd, tok) -> Hashtbl.add resword_table kwd tok)
-                  [("language", KW_language);("core", KW_core);("extend", KW_extend);("with", KW_with);("fn", KW_fn);("return", KW_return);("type", KW_type);("exception", KW_exception);("variant", KW_variant);("inline", KW_inline);("throws", KW_throws);("inl", KW_inl);("inr", KW_inr);("false", KW_false);("true", KW_true);("unit", KW_unit);("succ", KW_succ);("if", KW_if);("then", KW_then);("else", KW_else);("let", KW_let);("in", KW_in);("letrec", KW_letrec);("as", KW_as);("cast", KW_cast);("match", KW_match);("or", KW_or);("and", KW_and);("new", KW_new);("cons", KW_cons);("throw", KW_throw);("try", KW_try);("catch", KW_catch);("not", KW_not);("fix", KW_fix);("fold", KW_fold);("unfold", KW_unfold);("Bool", KW_Bool);("Nat", KW_Nat);("Unit", KW_Unit);("Top", KW_Top);("Bot", KW_Bot)]
+                  [("language", KW_language);("core", KW_core);("extend", KW_extend);("with", KW_with);("fn", KW_fn);("return", KW_return);("generic", KW_generic);("type", KW_type);("exception", KW_exception);("variant", KW_variant);("inline", KW_inline);("throws", KW_throws);("cast", KW_cast);("as", KW_as);("inl", KW_inl);("inr", KW_inr);("cons", KW_cons);("false", KW_false);("true", KW_true);("unit", KW_unit);("succ", KW_succ);("if", KW_if);("then", KW_then);("else", KW_else);("let", KW_let);("in", KW_in);("letrec", KW_letrec);("match", KW_match);("or", KW_or);("and", KW_and);("new", KW_new);("throw", KW_throw);("try", KW_try);("catch", KW_catch);("not", KW_not);("fix", KW_fix);("fold", KW_fold);("unfold", KW_unfold);("auto", KW_auto);("forall", KW_forall);("Bool", KW_Bool);("Nat", KW_Nat);("Unit", KW_Unit);("Top", KW_Top);("Bot", KW_Bot)]
 
 let unescapeInitTail (s:string) : string =
   let rec unesc s = match s with
@@ -53,7 +53,7 @@ let _idchar = _letter | _digit | ['_' '\'']         (*  identifier character *)
 let _universal = _                                  (* universal: any character *)
 
 (* reserved words consisting of special symbols *)
-let rsyms = "µ" | "," | ";" | "(" | ")" | "{" | "}" | "=" | ":" | "->" | "=>" | "|" | "<|" | "|>" | "[" | "]" | ":=" | "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "." | "List::head" | "List::isempty" | "List::tail" | "panic!" | "Nat::pred" | "Nat::iszero" | "Nat::rec" | "&"
+let rsyms = "µ" | "," | ";" | "(" | ")" | "{" | "}" | "[" | "]" | "=" | ":" | "->" | "=>" | "|" | "<|" | "|>" | ":=" | "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "." | "List::head" | "List::isempty" | "List::tail" | "panic!" | "Nat::pred" | "Nat::iszero" | "Nat::rec" | "&"
 
 (* user-defined token types *)
 let stellaIdent = ('_' | _letter)('!' | '-' | ':' | '?' | '_' | (_digit | _letter)) *

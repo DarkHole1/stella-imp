@@ -7,7 +7,7 @@ open AbsStella
 open Lexing
 %}
 
-%token KW_language KW_core KW_extend KW_with KW_fn KW_return KW_type KW_exception KW_variant KW_inline KW_throws KW_inl KW_inr KW_false KW_true KW_unit KW_succ KW_if KW_then KW_else KW_let KW_in KW_letrec KW_as KW_cast KW_match KW_or KW_and KW_new KW_cons KW_throw KW_try KW_catch KW_not KW_fix KW_fold KW_unfold KW_Bool KW_Nat KW_Unit KW_Top KW_Bot
+%token KW_language KW_core KW_extend KW_with KW_fn KW_return KW_generic KW_type KW_exception KW_variant KW_inline KW_throws KW_cast KW_as KW_inl KW_inr KW_cons KW_false KW_true KW_unit KW_succ KW_if KW_then KW_else KW_let KW_in KW_letrec KW_match KW_or KW_and KW_new KW_throw KW_try KW_catch KW_not KW_fix KW_fold KW_unfold KW_auto KW_forall KW_Bool KW_Nat KW_Unit KW_Top KW_Bot
 
 %token SYMB1 /* µ */
 %token SYMB2 /* , */
@@ -16,15 +16,15 @@ open Lexing
 %token SYMB5 /* ) */
 %token SYMB6 /* { */
 %token SYMB7 /* } */
-%token SYMB8 /* = */
-%token SYMB9 /* : */
-%token SYMB10 /* -> */
-%token SYMB11 /* => */
-%token SYMB12 /* | */
-%token SYMB13 /* <| */
-%token SYMB14 /* |> */
-%token SYMB15 /* [ */
-%token SYMB16 /* ] */
+%token SYMB8 /* [ */
+%token SYMB9 /* ] */
+%token SYMB10 /* = */
+%token SYMB11 /* : */
+%token SYMB12 /* -> */
+%token SYMB13 /* => */
+%token SYMB14 /* | */
+%token SYMB15 /* <| */
+%token SYMB16 /* |> */
 %token SYMB17 /* := */
 %token SYMB18 /* < */
 %token SYMB19 /* <= */
@@ -447,9 +447,10 @@ extension_list : /* empty */ { []  }
   ;
 
 decl : annotation_list KW_fn stellaIdent SYMB4 paramDecl_list SYMB5 returnType throwType SYMB6 decl_list KW_return expr SYMB7 { DeclFun ($1, $3, $5, $7, $8, $10, $12) }
-  | KW_type stellaIdent SYMB8 typeT { DeclTypeAlias ($2, $4) }
-  | KW_exception KW_type SYMB8 typeT { DeclExceptionType $4 }
-  | KW_exception KW_variant stellaIdent SYMB9 typeT { DeclExceptionVariant ($3, $5) }
+  | annotation_list KW_generic KW_fn stellaIdent SYMB8 stellaIdent_list SYMB9 SYMB4 paramDecl_list SYMB5 returnType throwType SYMB6 decl_list KW_return expr SYMB7 { DeclFunGeneric ($1, $4, $6, $9, $11, $12, $14, $16) }
+  | KW_type stellaIdent SYMB10 typeT { DeclTypeAlias ($2, $4) }
+  | KW_exception KW_type SYMB10 typeT { DeclExceptionType $4 }
+  | KW_exception KW_variant stellaIdent SYMB11 typeT { DeclExceptionVariant ($3, $5) }
   ;
 
 decl_list : /* empty */ { []  }
@@ -470,7 +471,7 @@ annotation_list : /* empty */ { []  }
   | annotation annotation_list { (fun (x,xs) -> x::xs) ($1, $2) }
   ;
 
-paramDecl : stellaIdent SYMB9 typeT { AParamDecl ($1, $3) }
+paramDecl : stellaIdent SYMB11 typeT { AParamDecl ($1, $3) }
   ;
 
 paramDecl_list : /* empty */ { []  }
@@ -479,7 +480,7 @@ paramDecl_list : /* empty */ { []  }
   ;
 
 returnType : /* empty */ { NoReturnType  }
-  | SYMB10 typeT { SomeReturnType $2 }
+  | SYMB12 typeT { SomeReturnType $2 }
   ;
 
 throwType : /* empty */ { NoThrowType  }
@@ -493,33 +494,36 @@ type9_list : type9 { (fun x -> [x]) $1 }
   | type9 SYMB2 type9_list { (fun (x,xs) -> x::xs) ($1, $3) }
   ;
 
-matchCase : pattern SYMB11 expr { AMatchCase ($1, $3) }
+matchCase : pattern SYMB13 expr { AMatchCase ($1, $3) }
   ;
 
 matchCase_list : /* empty */ { []  }
   | matchCase { (fun x -> [x]) $1 }
-  | matchCase SYMB12 matchCase_list { (fun (x,xs) -> x::xs) ($1, $3) }
+  | matchCase SYMB14 matchCase_list { (fun (x,xs) -> x::xs) ($1, $3) }
   ;
 
 optionalTyping : /* empty */ { NoTyping  }
-  | SYMB9 typeT { SomeTyping $2 }
+  | SYMB11 typeT { SomeTyping $2 }
   ;
 
 patternData : /* empty */ { NoPatternData  }
-  | SYMB8 pattern { SomePatternData $2 }
+  | SYMB10 pattern { SomePatternData $2 }
   ;
 
 exprData : /* empty */ { NoExprData  }
-  | SYMB8 expr { SomeExprData $2 }
+  | SYMB10 expr { SomeExprData $2 }
   ;
 
-pattern : SYMB13 stellaIdent patternData SYMB14 { PatternVariant ($2, $3) }
+pattern : pattern KW_cast KW_as typeT { PatternCastAs ($1, $4) }
+  | pattern KW_as typeT { PatternAsc ($1, $3) }
+  | SYMB15 stellaIdent patternData SYMB16 { PatternVariant ($2, $3) }
   | KW_inl SYMB4 pattern SYMB5 { PatternInl $3 }
   | KW_inr SYMB4 pattern SYMB5 { PatternInr $3 }
   | SYMB6 pattern_list SYMB7 { PatternTuple $2 }
   | SYMB6 labelledPattern_list SYMB7 { PatternRecord $2 }
-  | SYMB15 pattern_list SYMB16 { PatternList $2 }
-  | SYMB4 pattern SYMB2 pattern SYMB5 { PatternCons ($2, $4) }
+  | SYMB8 pattern_list SYMB9 { PatternList $2 }
+  | KW_cons SYMB4 pattern SYMB2 pattern SYMB5 { PatternCons ($3, $5) }
+  | SYMB4 pattern SYMB2 pattern SYMB5 { patternCons ($2, $4) }
   | KW_false { PatternFalse  }
   | KW_true { PatternTrue  }
   | KW_unit { PatternUnit  }
@@ -534,14 +538,14 @@ pattern_list : /* empty */ { []  }
   | pattern SYMB2 pattern_list { (fun (x,xs) -> x::xs) ($1, $3) }
   ;
 
-labelledPattern : stellaIdent SYMB8 pattern { ALabelledPattern ($1, $3) }
+labelledPattern : stellaIdent SYMB10 pattern { ALabelledPattern ($1, $3) }
   ;
 
 labelledPattern_list : labelledPattern { (fun x -> [x]) $1 }
   | labelledPattern SYMB2 labelledPattern_list { (fun (x,xs) -> x::xs) ($1, $3) }
   ;
 
-binding : stellaIdent SYMB8 expr { ABinding ($1, $3) }
+binding : stellaIdent SYMB10 expr { ABinding ($1, $3) }
   ;
 
 binding_list : binding { (fun x -> [x]) $1 }
@@ -552,6 +556,7 @@ expr : expr1 SYMB3 expr { Sequence ($1, $3) }
   | expr1 SYMB3 {  $1 }
   | KW_let patternBinding_list KW_in expr { Let ($2, $4) }
   | KW_letrec patternBinding_list KW_in expr { LetRec ($2, $4) }
+  | KW_generic SYMB8 stellaIdent_list SYMB9 expr { TypeAbstraction ($3, $5) }
   | expr1 {  $1 }
   ;
 
@@ -565,7 +570,7 @@ expr1 : expr2 SYMB17 expr1 { Assign ($1, $3) }
   | expr2 {  $1 }
   ;
 
-patternBinding : pattern SYMB8 expr { APatternBinding ($1, $3) }
+patternBinding : pattern SYMB10 expr { APatternBinding ($1, $3) }
   ;
 
 patternBinding_list : patternBinding { (fun x -> [x]) $1 }
@@ -588,9 +593,9 @@ expr2_list : expr2 SYMB3 { (fun x -> [x]) $1 }
 expr3 : expr3 KW_as type2 { TypeAsc ($1, $3) }
   | expr3 KW_cast KW_as type2 { TypeCast ($1, $4) }
   | KW_fn SYMB4 paramDecl_list SYMB5 SYMB6 KW_return expr SYMB7 { Abstraction ($3, $7) }
-  | SYMB13 stellaIdent exprData SYMB14 { Variant ($2, $3) }
+  | SYMB15 stellaIdent exprData SYMB16 { Variant ($2, $3) }
   | KW_match expr2 SYMB6 matchCase_list SYMB7 { Match ($2, $4) }
-  | SYMB15 expr_list SYMB16 { List $2 }
+  | SYMB8 expr_list SYMB9 { List $2 }
   | expr3 SYMB24 expr4 { Add ($1, $3) }
   | expr3 SYMB25 expr4 { Subtract ($1, $3) }
   | expr3 KW_or expr4 { LogicOr ($1, $3) }
@@ -603,12 +608,13 @@ expr4 : expr4 SYMB26 expr5 { Multiply ($1, $3) }
   | expr5 {  $1 }
   ;
 
-expr5 : KW_new SYMB4 expr5 SYMB5 { Ref $3 }
+expr5 : KW_new SYMB4 expr SYMB5 { Ref $3 }
   | SYMB26 expr5 { Deref $2 }
   | expr6 {  $1 }
   ;
 
 expr6 : expr6 SYMB4 expr_list SYMB5 { Application ($1, $3) }
+  | expr6 SYMB8 typeT_list SYMB9 { TypeApplication ($1, $3) }
   | expr6 SYMB28 stellaIdent { DotRecord ($1, $3) }
   | expr6 SYMB28 int { DotTuple ($1, $3) }
   | SYMB6 expr_list SYMB7 { Tuple $2 }
@@ -619,8 +625,9 @@ expr6 : expr6 SYMB4 expr_list SYMB5 { Application ($1, $3) }
   | SYMB31 SYMB4 expr SYMB5 { Tail $3 }
   | SYMB32 { Panic  }
   | KW_throw SYMB4 expr SYMB5 { Throw $3 }
-  | KW_try SYMB6 expr SYMB7 KW_catch SYMB6 pattern SYMB11 expr SYMB7 { TryCatch ($3, $7, $9) }
+  | KW_try SYMB6 expr SYMB7 KW_catch SYMB6 pattern SYMB13 expr SYMB7 { TryCatch ($3, $7, $9) }
   | KW_try SYMB6 expr SYMB7 KW_with SYMB6 expr SYMB7 { TryWith ($3, $7) }
+  | KW_try SYMB6 expr SYMB7 KW_cast KW_as typeT SYMB6 pattern SYMB13 expr SYMB7 KW_with SYMB6 expr SYMB7 { TryCastAs ($3, $7, $9, $11, $15) }
   | KW_inl SYMB4 expr SYMB5 { Inl $3 }
   | KW_inr SYMB4 expr SYMB5 { Inr $3 }
   | KW_succ SYMB4 expr SYMB5 { Succ $3 }
@@ -629,8 +636,8 @@ expr6 : expr6 SYMB4 expr_list SYMB5 { Application ($1, $3) }
   | SYMB34 SYMB4 expr SYMB5 { IsZero $3 }
   | KW_fix SYMB4 expr SYMB5 { Fix $3 }
   | SYMB35 SYMB4 expr SYMB2 expr SYMB2 expr SYMB5 { NatRec ($3, $5, $7) }
-  | KW_fold SYMB15 typeT SYMB16 expr7 { Fold ($3, $5) }
-  | KW_unfold SYMB15 typeT SYMB16 expr7 { Unfold ($3, $5) }
+  | KW_fold SYMB8 typeT SYMB9 expr7 { Fold ($3, $5) }
+  | KW_unfold SYMB8 typeT SYMB9 expr7 { Unfold ($3, $5) }
   | expr7 {  $1 }
   ;
 
@@ -643,7 +650,9 @@ expr7 : KW_true { ConstTrue  }
   | SYMB4 expr SYMB5 {  $2 }
   ;
 
-typeT : KW_fn SYMB4 typeT_list SYMB5 SYMB10 typeT { TypeFun ($3, $6) }
+typeT : KW_auto { TypeAuto  }
+  | KW_fn SYMB4 typeT_list SYMB5 SYMB12 typeT { TypeFun ($3, $6) }
+  | KW_forall stellaIdent_list SYMB28 typeT { TypeForAll ($2, $4) }
   | SYMB1 stellaIdent SYMB28 typeT { TypeRec ($2, $4) }
   | type1 {  $1 }
   ;
@@ -654,8 +663,8 @@ type1 : type2 SYMB24 type2 { TypeSum ($1, $3) }
 
 type2 : SYMB6 typeT_list SYMB7 { TypeTuple $2 }
   | SYMB6 recordFieldType_list SYMB7 { TypeRecord $2 }
-  | SYMB13 variantFieldType_list SYMB14 { TypeVariant $2 }
-  | SYMB15 typeT SYMB16 { TypeList $2 }
+  | SYMB15 variantFieldType_list SYMB16 { TypeVariant $2 }
+  | SYMB8 typeT SYMB9 { TypeList $2 }
   | type3 {  $1 }
   ;
 
@@ -682,14 +691,14 @@ variantFieldType_list : /* empty */ { []  }
   | variantFieldType SYMB2 variantFieldType_list { (fun (x,xs) -> x::xs) ($1, $3) }
   ;
 
-recordFieldType : stellaIdent SYMB9 typeT { ARecordFieldType ($1, $3) }
+recordFieldType : stellaIdent SYMB11 typeT { ARecordFieldType ($1, $3) }
   ;
 
 recordFieldType_list : recordFieldType { (fun x -> [x]) $1 }
   | recordFieldType SYMB2 recordFieldType_list { (fun (x,xs) -> x::xs) ($1, $3) }
   ;
 
-typing : expr SYMB9 typeT { ATyping ($1, $3) }
+typing : expr SYMB11 typeT { ATyping ($1, $3) }
   ;
 
 int :  TOK_Integer  { $1 };
