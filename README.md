@@ -6,3 +6,14 @@ Build and run
 dune exec stella typecheck test/HelloYogurt.stella
 ```
 Tested on OCaml 4.14.1 and dune 3.17.2.
+
+## TODO List:
+- [ ] Error messages for all types of errors
+- [ ] Equal / NotEqual errors (they actually only Nat)
+- [ ] Variant typecheck
+- [ ] Record typecheck
+- [ ] Match
+- [ ] Tests
+- [ ] #nullary-functions and #multiparameter-functions
+- [ ] #letrec-bindings with #pattern-ascriptions
+- [ ] #let-many-bindings
