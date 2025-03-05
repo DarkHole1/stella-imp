@@ -265,12 +265,46 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
           ()
           (List.combine exprs tyExprs)
   | Tuple _, _ -> raise (TyExn (UnexpectedTuple (ty, expr)))
-  | Record _, TypeRecord _ ->
-      (* TODO missing / unexpected record fields *)
-      let ty' = infer ctx expr in
-      if ty' != ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
-      else ()
+  | Record fields, TypeRecord fieldTypes ->
+      (* TODO check dup fields *)
+      let fields' =
+        List.map
+          (fun (ABinding (StellaIdent name, expr')) -> (name, expr'))
+          fields
+      in
+      let fieldTypes' =
+        List.map
+          (fun (ARecordFieldType (StellaIdent name, ty')) -> (name, ty'))
+          fieldTypes
+      in
+      let rec find (fields : (string * expr) list)
+          (types : (string * typeT) list)
+          ((fieldExpr, missingFields, extraFields) :
+            (expr * typeT) list * string list * string list) =
+        match fields with
+        | (name, expr) :: fields' -> (
+            match List.assoc_opt name types with
+            | Some ty ->
+                find fields'
+                  (List.remove_assoc name types)
+                  ((expr, ty) :: fieldExpr, missingFields, extraFields)
+            | _ ->
+                find fields'
+                  (List.remove_assoc name types)
+                  (fieldExpr, missingFields, name :: extraFields))
+        | _ ->
+            ( fieldExpr,
+              List.concat [ List.map (fun (a, _) -> a) types; missingFields ],
+              extraFields )
+      in
+      let fieldExpr, missingFields, extraFields =
+        find fields' fieldTypes' ([], [], [])
+      in
+      if List.compare_length_with extraFields 0 != 0 then
+        raise (TyExn (UnexpectedRecordFields (extraFields, ty, expr)))
+      else if List.compare_length_with missingFields 0 != 0 then
+        raise (TyExn (MissingRecordFields (missingFields, ty, expr)))
+      else List.iter (fun (expr', ty') -> typecheck ctx expr' ty) fieldExpr
   | Record _, _ -> raise (TyExn (UnexpectedRecord (ty, expr)))
   | ConsList (e1, e2), TypeList ty' ->
       typecheck ctx e1 ty';
