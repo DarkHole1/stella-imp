@@ -9,7 +9,7 @@ Tested on OCaml 4.14.1 and dune 3.17.2.
 
 ## TODO List:
 - [ ] Error messages for all types of errors
-- [ ] Equal / NotEqual errors (they actually only Nat)
+- [x] Equal / NotEqual errors (they actually only Nat)
 - [ ] Variant typecheck
 - [ ] Record typecheck
 - [ ] Match

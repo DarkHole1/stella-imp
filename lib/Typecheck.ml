@@ -166,18 +166,14 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       typecheck ctx e2 TypeNat
   | GreaterThanOrEqual (e1, e2), _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
-  | Equal _, TypeBool ->
-      let ty' = infer ctx expr in
-      if ty = ty' then ()
-      else raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
-      (* Never gonna happens *)
+  | Equal (e1, e2), TypeBool ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat
   | Equal _, _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
-  | NotEqual _, TypeBool ->
-      let ty' = infer ctx expr in
-      if ty = ty' then ()
-      else raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
-      (* Never gonna happens *)
+  | NotEqual (e1, e2), TypeBool ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat
   | NotEqual _, _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
   | TypeAsc (e1, ty'), _ ->
@@ -368,26 +364,14 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat;
       TypeBool
-  | Equal (e1, e2) -> (
-      let ty1 = infer ctx e1 in
-      let ty2 = infer ctx e2 in
-      if ty1 != ty2 then
-        raise (TyExn (UnexpectedTypeOfExpression (ty1, ty2, expr)))
-      else
-        match ty1 with
-        | TypeFun _ ->
-            not_implemented () (* TODO: More appropriate error for function *)
-        | _ -> TypeBool)
-  | NotEqual (e1, e2) -> (
-      let ty1 = infer ctx e1 in
-      let ty2 = infer ctx e2 in
-      if ty1 != ty2 then
-        raise (TyExn (UnexpectedTypeOfExpression (ty1, ty2, expr)))
-      else
-        match ty1 with
-        | TypeFun _ ->
-            not_implemented () (* TODO: More appropriate error for function *)
-        | _ -> TypeBool)
+  | Equal (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeBool
+  | NotEqual (e1, e2) ->
+      typecheck ctx e1 TypeNat;
+      typecheck ctx e2 TypeNat;
+      TypeBool
   | TypeAsc (expr', ty) ->
       typecheck ctx expr' ty;
       ty
