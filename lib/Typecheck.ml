@@ -18,7 +18,7 @@ type tyError =
   | MissingRecordFields of string list * typeT * expr
   | UnexpectedRecordFields of string list * typeT * expr
   | UnexpectedFieldAccess of typeT * string * expr
-  | UnexpectedVariantLabel
+  | UnexpectedVariantLabel of typeT * string * expr
   | TupleIndexOutOfBounds of typeT * int * expr
   | UnexpectedTupleLength
   | AmbiguousSumType of expr
@@ -195,12 +195,18 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       let ctx' = put_params ctx params in
       typecheck ctx' expr' tyReturn
   | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
-  | Variant _, TypeVariant _ ->
-      (* TODO: Not infer, check *)
-      let ty' = infer ctx expr in
-      if ty' != ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
-      else ()
+  | Variant (StellaIdent name, SomeExprData expr'), TypeVariant fieldTypes ->
+      (* TODO: No expr data *)
+      let rec find (fieldTypes : variantFieldType list) =
+        match fieldTypes with
+        | AVariantFieldType (StellaIdent name', SomeTyping ty') :: fieldTypes'
+          ->
+            if name = name' then ty' else find fieldTypes'
+        | _ -> raise (TyExn (UnexpectedVariantLabel (ty, name, expr)))
+      in
+      let ty' = find fieldTypes in
+      typecheck ctx expr' ty'
+  | Variant _, _ -> raise (TyExn (UnexpectedVariant (ty, expr)))
   (* Match TODO *)
   | List _, TypeList _ ->
       let ty' = infer ctx expr in
