@@ -13,7 +13,7 @@ Tested on OCaml 4.14.1 and dune 3.17.2.
 - [x] Variant typecheck
 - [x] Record typecheck
 - [ ] Match
-- [ ] Duplicate fields
+- [x] Duplicate fields (probably not perfect in infer)
 - [ ] Tests
 - [ ] #nullary-functions and #multiparameter-functions
 - [ ] #letrec-bindings with #pattern-ascriptions

@@ -106,13 +106,6 @@ type context = (string * typeT) list
 
 let put (ctx : context) (s : string) (ty : typeT) : context = (s, ty) :: ctx
 
-let put_params (ctx : context) (params : paramDecl list) : context =
-  List.concat
-    [
-      List.map (fun (AParamDecl (StellaIdent name, ty)) -> (name, ty)) params;
-      ctx;
-    ]
-
 let rec get (ctx : context) (s : string) : typeT option =
   match ctx with
   | (s', ty) :: ctx' -> if s = s' then Some ty else get ctx' s
@@ -125,6 +118,66 @@ let dePatternBinder (p : pattern) (ty : typeT) : context =
   match p with
   | PatternVar (StellaIdent name) -> [ (name, ty) ]
   | _ -> not_implemented ()
+
+let find_dup (xs : string list) =
+  let rec find_dup' (xs : string list) (dup : string list) =
+    match xs with
+    | x :: xs' ->
+        let dup' =
+          if List.mem x xs' && not (List.mem x dup) then x :: dup else dup
+        in
+        find_dup' xs' dup'
+    | _ -> dup
+  in
+  find_dup' xs []
+
+let rec check_type (ty : typeT) =
+  match ty with
+  | TypeFun (types, res) ->
+      List.iter check_type types;
+      check_type res
+  | TypeSum (ty1, ty2) ->
+      check_type ty1;
+      check_type ty2
+  | TypeTuple types -> List.iter check_type types
+  | TypeRecord fieldTypes ->
+      let dup =
+        List.map
+          (fun (ARecordFieldType (StellaIdent name, _)) -> name)
+          fieldTypes
+        |> find_dup
+      in
+      if List.compare_length_with dup 0 > 0 then
+        raise (TyExn (DuplicateRecordTypeFields (dup, ty)))
+      else
+        List.map (fun (ARecordFieldType (_, ty)) -> ty) fieldTypes
+        |> List.iter check_type
+  | TypeVariant varTypes ->
+      let dup =
+        List.map
+          (fun (AVariantFieldType (StellaIdent name, _)) -> name)
+          varTypes
+        |> find_dup
+      in
+      if List.compare_length_with dup 0 > 0 then
+        raise (TyExn (DuplicateRecordTypeFields (dup, ty)))
+      else
+        List.filter_map
+          (fun (AVariantFieldType (_, typing)) ->
+            match typing with SomeTyping ty -> Some ty | NoTyping -> None)
+          varTypes
+        |> List.iter check_type
+  | TypeList ty -> check_type ty
+  | TypeRef ty -> check_type ty
+  | _ -> ()
+
+let put_params (ctx : context) (params : paramDecl list) : context =
+  List.iter (fun (AParamDecl (_, ty)) -> check_type ty) params;
+  List.concat
+    [
+      List.map (fun (AParamDecl (StellaIdent name, ty)) -> (name, ty)) params;
+      ctx;
+    ]
 
 let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   match (expr, ty) with
@@ -179,7 +232,8 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | TypeAsc (e1, ty'), _ ->
       if ty != ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
-      else typecheck ctx e1 ty'
+      else check_type ty';
+      typecheck ctx e1 ty'
   | Abstraction (params, expr'), TypeFun (tyParams, tyReturn) ->
       (* Check arity *)
       (* List.compare_lengths tyParams params = 0 *)
@@ -193,6 +247,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
         ()
         (List.combine tyParams params);
       let ctx' = put_params ctx params in
+      check_type tyReturn;
       typecheck ctx' expr' tyReturn
   | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
   | Variant (StellaIdent name, SomeExprData expr'), TypeVariant fieldTypes ->
@@ -589,6 +644,7 @@ let typecheckProgram (program : program) =
           | DeclFun
               ([], _, params, SomeReturnType tyReturn, NoThrowType, [], expr) ->
               let ctx' = put_params ctx params in
+              check_type tyReturn;
               typecheck ctx' expr tyReturn
           | _ -> not_implemented ())
         () decls
