@@ -190,10 +190,67 @@ let rec get (ctx : context) (s : string) : typeT option =
 let checkMain (ctx : context) : unit =
   match get ctx "main" with None -> raise (TyExn MissingMain) | _ -> ()
 
-let dePatternBinder (p : pattern) (ty : typeT) : context =
-  match p with
-  | PatternVar (StellaIdent name) -> [ (name, ty) ]
-  | _ -> not_implemented ()
+let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
+  match (p, ty) with
+  (*
+  | PatternCastAs of pattern * typeT
+  *)
+  | PatternAsc (p', ty'), _ ->
+      if ty' != ty then not_implemented ()
+      (* TODO *) else deconstruct_pattern_binder p' ty
+  | PatternVariant (StellaIdent name, patternData), TypeVariant fieldTypes -> (
+      let rec find fieldTypes =
+        match fieldTypes with
+        | AVariantFieldType (StellaIdent name', typing) :: fieldTypes' ->
+            if name = name' then typing else find fieldTypes'
+        | _ -> not_implemented () (* TODO Error *)
+      in
+      let typing = find fieldTypes in
+      match (typing, patternData) with
+      | SomeTyping ty', SomePatternData p' -> deconstruct_pattern_binder p' ty'
+      | NoTyping, NoPatternData -> []
+      | _ -> not_implemented () (* TODO Error *))
+  | PatternVariant _, _ -> not_implemented () (* TODO Error *)
+  | PatternInl p', TypeSum (tyL, _) -> deconstruct_pattern_binder p' tyL
+  | PatternInl _, _ -> not_implemented () (* TODO Error *)
+  | PatternInr p', TypeSum (_, tyR) -> deconstruct_pattern_binder p' tyR
+  | PatternInr _, _ -> not_implemented () (* TODO Error *)
+  | PatternTuple ps, TypeTuple types ->
+      (* TODO: check length *)
+      List.combine ps types
+      |> List.concat_map (fun (p', ty') -> deconstruct_pattern_binder p' ty')
+  | PatternTuple _, _ -> not_implemented () (* TODO Error *)
+  | PatternRecord lps, TypeRecord ftys ->
+      (* TODO Check fields *)
+      let types =
+        List.map
+          (fun (ARecordFieldType (StellaIdent name, ty)) -> (name, ty))
+          ftys
+      in
+      List.concat_map
+        (fun (ALabelledPattern (StellaIdent name, p')) ->
+          List.assoc name types |> deconstruct_pattern_binder p')
+        lps
+  | PatternRecord _, _ -> not_implemented () (* TODO Error *)
+  | PatternList ps, TypeList ty' ->
+      List.concat_map (fun p' -> deconstruct_pattern_binder p' ty') ps
+  | PatternList _, _ -> not_implemented () (* TODO Error *)
+  | PatternCons (p1, p2), TypeList ty' ->
+      List.concat
+        [ deconstruct_pattern_binder p1 ty'; deconstruct_pattern_binder p2 ty ]
+  | PatternCons _, _ -> not_implemented () (* TODO Error *)
+  | PatternFalse, TypeBool -> []
+  | PatternFalse, _ -> not_implemented () (* TODO Error *)
+  | PatternTrue, TypeBool -> []
+  | PatternTrue, _ -> not_implemented () (* TODO Error *)
+  | PatternUnit, TypeUnit -> []
+  | PatternUnit, _ -> not_implemented () (* TODO Error *)
+  | PatternInt _, TypeNat -> []
+  | PatternInt _, _ -> not_implemented () (* TODO Error *)
+  | PatternSucc p', TypeNat -> deconstruct_pattern_binder p' TypeNat
+  | PatternSucc _, _ -> not_implemented () (* TODO Error *)
+  | PatternVar (StellaIdent name), _ -> [ (name, ty) ]
+  | _, _ -> not_implemented ()
 
 let find_dup (xs : string list) =
   let rec find_dup' (xs : string list) (dup : string list) =
@@ -269,7 +326,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       let bindersCtx =
         List.concat_map
           (fun (APatternBinding (p, expr'')) ->
-            dePatternBinder p (infer ctx expr''))
+            deconstruct_pattern_binder p (infer ctx expr''))
           binders
       in
       let ctx' = List.concat [ bindersCtx; ctx ] in
@@ -338,7 +395,15 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       let ty' = find fieldTypes in
       typecheck ctx expr' ty'
   | Variant _, _ -> raise (TyExn (UnexpectedVariant (ty, expr)))
-  (* Match TODO *)
+  | Match (_, []), _ -> raise (TyExn (IllegalEmptyMatching expr))
+  | Match (expr', cases), _ ->
+      (* TODO: Exhaustive check *)
+      let ty' = infer ctx expr' in
+      List.iter
+        (fun (AMatchCase (pat, expr'')) ->
+          let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
+          typecheck ctx' expr'' ty)
+        cases
   | List _, TypeList _ ->
       let ty' = infer ctx expr in
       if ty' != ty then
@@ -533,7 +598,7 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       let bindersCtx =
         List.concat_map
           (fun (APatternBinding (p, expr'')) ->
-            dePatternBinder p (infer ctx expr''))
+            deconstruct_pattern_binder p (infer ctx expr''))
           binders
       in
       let ctx' = List.concat [ bindersCtx; ctx ] in
