@@ -8,7 +8,7 @@ dune exec stella typecheck test/HelloYogurt.stella
 Tested on OCaml 4.14.1 and dune 3.17.2.
 
 ## TODO List:
-- [ ] Error messages for all types of errors
+- [x] Error messages for all types of errors (almost)
 - [x] Equal / NotEqual errors (they actually only Nat)
 - [x] Variant typecheck
 - [x] Record typecheck

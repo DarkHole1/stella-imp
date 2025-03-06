@@ -20,7 +20,7 @@ type tyError =
   | UnexpectedFieldAccess of typeT * string * expr
   | UnexpectedVariantLabel of typeT * string * expr
   | TupleIndexOutOfBounds of typeT * int * expr
-  | UnexpectedTupleLength
+  | UnexpectedTupleLength of int * int * expr
   | AmbiguousSumType of expr
   | AmbiguousVariantType of expr
   | AmbiguousList of expr
@@ -100,6 +100,82 @@ let showError (err : tyError) : string =
       ^ PrintStella.printTree PrintStella.prtTypeT ty
       ^ "\n  но получен список в выражении\n    "
       ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedInjection (ty, expr) ->
+      "ERROR_UNEXPECTED_INJECTION\n  ожидался тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  но получена инъекция в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | MissingRecordFields (missing, ty, expr) ->
+      "ERROR_MISSING_RECORD_FIELDS\n  отсуствуют поля\n    "
+      ^ String.concat "\n    " missing
+      ^ "\n  для типа\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedRecordFields (extra, ty, expr) ->
+      "ERROR_UNEXPECTED_RECORD_FIELDS\n  присутствуют лишние поля\n    "
+      ^ String.concat "\n    " extra
+      ^ "\n  для типа\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedFieldAccess (ty, field, expr) ->
+      "ERROR_UNEXPECTED_FIELD_ACCESS\n  в типе\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  отсутствует поле\n    " ^ field ^ "\n  в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedVariantLabel (ty, variant, expr) ->
+      "ERROR_UNEXPECTED_VARIANT_LABEL\n  в типе\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  отсутствует вариант\n    " ^ variant ^ "\n  в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | TupleIndexOutOfBounds (ty, index, expr) ->
+      "ERROR_TUPLE_INDEX_OUT_OF_BOUNDS\n  индекс\n    " ^ Int.to_string index
+      ^ "\n  выходит за пределы тип\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | UnexpectedTupleLength (len1, len2, expr) ->
+      "ERROR_UNEXPECTED_TUPLE_LENGTH\n  ожидался кортёж длиной\n    "
+      ^ Int.to_string len1 ^ "\n  но получен кортёж длиной\n    "
+      ^ Int.to_string len2 ^ "\n  в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | AmbiguousSumType expr ->
+      "ERROR_AMBIGUOUS_SUM_TYPE\n\
+      \  невозможно определить тип инъекции в выражении\n\
+      \    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | AmbiguousVariantType expr ->
+      "ERROR_AMBIGUOUS_VARIANT_TYPE\n\
+      \  невозможно определить тип варианта в выражении\n\
+      \    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | AmbiguousList expr ->
+      "ERROR_AMBIGUOUS_LIST\n\
+      \  невозможно определить тип списка в выражении\n\
+      \    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  | IllegalEmptyMatching expr ->
+      "ERROR_ILLEGAL_EMPTY_MATCHING\n\
+      \  match-выражение с пустым списком альтернатив\n\
+      \    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+  (* 
+  | NonexhaustiveMatchPatterns
+  | UnexpectedPatternForType
+  *)
+  | DuplicateRecordFields (dup, ty, expr) ->
+      "ERROR_DUPLICATE_RECORD_FIELDS\n  в выражении\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ "\n  дублируются поля\n    " ^ String.concat "\n    " dup
+  | DuplicateRecordTypeFields (dup, ty) ->
+      "ERROR_DUPLICATE_RECORD_TYPE_FIELDS\n  в типа\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  дублируются поля\n    " ^ String.concat "\n    " dup
+  | DuplicateVariantTypeFields (dup, ty) ->
+      "ERROR_DUPLICATE_VARIANT_TYPE_FIELDS\n  в типа\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ "\n  дублируются варианты\n    " ^ String.concat "\n    " dup
   | _ -> not_implemented ()
 
 type context = (string * typeT) list
@@ -313,7 +389,11 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else ()
   | Tuple exprs, TypeTuple tyExprs ->
-      if List.compare_lengths exprs tyExprs != 0 then () (* TODO: Error *)
+      if List.compare_lengths exprs tyExprs != 0 then
+        raise
+          (TyExn
+             (UnexpectedTupleLength
+                (List.length tyExprs, List.length exprs, expr)))
       else
         List.fold_left
           (fun _ (expr, ty) -> typecheck ctx expr ty)
