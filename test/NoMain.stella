@@ -1,0 +1,3 @@
+language core;
+
+fn hello() -> Nat { return 1 }

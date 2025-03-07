@@ -555,7 +555,10 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | IsZero expr', TypeNat -> typecheck ctx expr' TypeNat
   | IsZero _, _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
-  | Fix expr', _ -> typecheck ctx expr' (TypeFun ([ ty ], ty))
+  | Fix _, _ ->
+      let ty' = infer ctx expr in
+      if ty' <> ty then
+        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
   | NatRec (eN, eZ, eS), _ ->
       typecheck ctx eN TypeNat;
       typecheck ctx eZ ty;
