@@ -196,7 +196,7 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
   | PatternCastAs of pattern * typeT
   *)
   | PatternAsc (p', ty'), _ ->
-      if ty' != ty then not_implemented ()
+      if ty' <> ty then not_implemented ()
       (* TODO *) else deconstruct_pattern_binder p' ty
   | PatternVariant (StellaIdent name, patternData), TypeVariant fieldTypes -> (
       let rec find fieldTypes =
@@ -363,7 +363,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | NotEqual _, _ ->
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
   | TypeAsc (e1, ty'), _ ->
-      if ty != ty then
+      if ty <> ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else check_type ty';
       typecheck ctx e1 ty'
@@ -372,7 +372,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       (* List.compare_lengths tyParams params = 0 *)
       List.fold_left
         (fun _ (ty1, AParamDecl (ident, ty2)) ->
-          if ty1 != ty2 then
+          if ty1 <> ty2 then
             raise
               (TyExn
                  (UnexpectedTypeForParameter (ty1, ty2, AParamDecl (ident, ty2))))
@@ -406,7 +406,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
         cases
   | List _, TypeList _ ->
       let ty' = infer ctx expr in
-      if ty' != ty then
+      if ty' <> ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else ()
   | Add (e1, e2), TypeNat ->
@@ -440,21 +440,21 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
   | Application _, _ ->
       let ty' = infer ctx expr in
-      if ty' != ty then
+      if ty' <> ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else ()
   | DotRecord _, _ ->
       let ty' = infer ctx expr in
-      if ty' != ty then
+      if ty' <> ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else ()
   | DotTuple _, _ ->
       let ty' = infer ctx expr in
-      if ty' != ty then
+      if ty' <> ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else ()
   | Tuple exprs, TypeTuple tyExprs ->
-      if List.compare_lengths exprs tyExprs != 0 then
+      if List.compare_lengths exprs tyExprs <> 0 then
         raise
           (TyExn
              (UnexpectedTupleLength
@@ -485,7 +485,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
         | _ -> dupFields
       in
       let dupFields = findDupFields fields' [] in
-      if List.compare_length_with dupFields 0 != 0 then
+      if List.compare_length_with dupFields 0 <> 0 then
         raise (TyExn (DuplicateRecordFields (dupFields, ty, expr)))
       else
         let fieldTypes' =
@@ -516,9 +516,9 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
         let fieldExpr, missingFields, extraFields =
           convert fields' fieldTypes' ([], [], [])
         in
-        if List.compare_length_with extraFields 0 != 0 then
+        if List.compare_length_with extraFields 0 <> 0 then
           raise (TyExn (UnexpectedRecordFields (extraFields, ty, expr)))
-        else if List.compare_length_with missingFields 0 != 0 then
+        else if List.compare_length_with missingFields 0 <> 0 then
           raise (TyExn (MissingRecordFields (missingFields, ty, expr)))
         else List.iter (fun (expr', ty') -> typecheck ctx expr' ty) fieldExpr
   | Record _, _ -> raise (TyExn (UnexpectedRecord (ty, expr)))
@@ -528,17 +528,17 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | ConsList _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
   | Head _, _ ->
       let ty' = infer ctx expr in
-      if ty' != ty then
+      if ty' <> ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else ()
   | Tail _, _ ->
       let ty' = infer ctx expr in
-      if ty' != ty then
+      if ty' <> ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else ()
   | IsEmpty _, _ ->
       let ty' = infer ctx expr in
-      if ty' != ty then
+      if ty' <> ty then
         raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
       else ()
   | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
@@ -558,7 +558,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | Fix expr', _ -> typecheck ctx expr' (TypeFun ([ ty ], ty))
   | NatRec (eN, eZ, eS), _ ->
       typecheck ctx eN TypeNat;
-      typecheck ctx eN ty;
+      typecheck ctx eZ ty;
       typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)))
   | ConstTrue, TypeBool -> ()
   | ConstTrue, _ ->
@@ -576,7 +576,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       match get ctx name with
       | None -> raise (TyExn (UndefinedVariable (name, expr)))
       | Some ty' ->
-          if ty != ty' then
+          if ty <> ty' then
             raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
           else ())
   | a, _ ->
@@ -692,9 +692,9 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       let ty = infer ctx expr in
       match ty with
       | TypeTuple tyTuple ->
-          if List.compare_length_with tyTuple n > 0 || n <= 0 then
+          if List.compare_length_with tyTuple n < 0 || n <= 0 then
             raise (TyExn (TupleIndexOutOfBounds (ty, n, expr)))
-          else List.nth tyTuple (n + 1)
+          else List.nth tyTuple (n - 1)
       | _ -> raise (TyExn (NotATuple (ty, expr))))
   | Tuple exprs -> TypeTuple (List.map (infer ctx) exprs)
   | Record bindings ->
@@ -740,7 +740,7 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       let ty = infer ctx expr' in
       match ty with
       | TypeFun ([ tyArg ], tyRet) ->
-          if tyArg != tyRet then
+          if tyArg <> tyRet then
             raise
               (TyExn
                  (UnexpectedTypeOfExpression
