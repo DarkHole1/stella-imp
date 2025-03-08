@@ -1,0 +1,3 @@
+language core;
+
+fn main(x : {a : Nat}) -> Nat { return x.a }
