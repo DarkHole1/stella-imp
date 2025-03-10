@@ -3,7 +3,7 @@ open AbsStella
 type tyError =
   | MissingMain
   | UndefinedVariable of string * expr
-  | UnexpectedTypeOfExpression of typeT * typeT * expr
+  | UnexpectedTypeForExpression of typeT * typeT * expr
   | NotAFunction of typeT * expr
   | NotATuple of typeT * expr
   | NotARecord of typeT * expr
@@ -26,7 +26,7 @@ type tyError =
   | AmbiguousList of expr
   | IllegalEmptyMatching of expr
   | NonexhaustiveMatchPatterns
-  | UnexpectedPatternForType
+  | UnexpectedPatternForType of pattern * typeT
   | DuplicateRecordFields of string list * typeT * expr
   | DuplicateRecordTypeFields of string list * typeT
   | DuplicateVariantTypeFields of string list * typeT
@@ -42,8 +42,8 @@ let showError (err : tyError) : string =
       "ERROR_UNDEFINED_VARIABLE\n  неизвестная переменная\n    " ^ name
       ^ "\n  в выражении\n    "
       ^ PrintStella.printTree PrintStella.prtExpr expr
-  | UnexpectedTypeOfExpression (ty1, ty2, expr) ->
-      "ERROR_UNEXPECTED_TYPE_OF_EXPRESSION\n  ожидался тип\n    "
+  | UnexpectedTypeForExpression (ty1, ty2, expr) ->
+      "ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION\n  ожидался тип\n    "
       ^ PrintStella.printTree PrintStella.prtTypeT ty1
       ^ "\n  но получен тип\n    "
       ^ PrintStella.printTree PrintStella.prtTypeT ty2
@@ -162,8 +162,12 @@ let showError (err : tyError) : string =
       ^ PrintStella.printTree PrintStella.prtExpr expr
   (* 
   | NonexhaustiveMatchPatterns
-  | UnexpectedPatternForType
   *)
+  | UnexpectedPatternForType (pat, ty) ->
+      "ERROR_UNEXPECTED_PATTERN_FOR_TYPE\n  образец\n    "
+      ^ PrintStella.printTree PrintStella.prtPattern pat
+      ^ "\n  не соответствует типу\n    "
+      ^ PrintStella.printTree PrintStella.prtTypeT ty
   | DuplicateRecordFields (dup, ty, expr) ->
       "ERROR_DUPLICATE_RECORD_FIELDS\n  в выражении\n    "
       ^ PrintStella.printTree PrintStella.prtExpr expr
@@ -196,30 +200,32 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
   | PatternCastAs of pattern * typeT
   *)
   | PatternAsc (p', ty'), _ ->
-      if ty' <> ty then not_implemented ()
-      (* TODO *) else deconstruct_pattern_binder p' ty
+      if ty' <> ty then raise (TyExn (UnexpectedPatternForType (p, ty)))
+      else deconstruct_pattern_binder p' ty
   | PatternVariant (StellaIdent name, patternData), TypeVariant fieldTypes -> (
       let rec find fieldTypes =
         match fieldTypes with
         | AVariantFieldType (StellaIdent name', typing) :: fieldTypes' ->
             if name = name' then typing else find fieldTypes'
-        | _ -> not_implemented () (* TODO Error *)
+        | _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
       in
       let typing = find fieldTypes in
       match (typing, patternData) with
       | SomeTyping ty', SomePatternData p' -> deconstruct_pattern_binder p' ty'
       | NoTyping, NoPatternData -> []
-      | _ -> not_implemented () (* TODO Error *))
-  | PatternVariant _, _ -> not_implemented () (* TODO Error *)
+      | _ -> raise (TyExn (UnexpectedPatternForType (p, ty))))
+  | PatternVariant _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternInl p', TypeSum (tyL, _) -> deconstruct_pattern_binder p' tyL
-  | PatternInl _, _ -> not_implemented () (* TODO Error *)
+  | PatternInl _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternInr p', TypeSum (_, tyR) -> deconstruct_pattern_binder p' tyR
-  | PatternInr _, _ -> not_implemented () (* TODO Error *)
+  | PatternInr _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternTuple ps, TypeTuple types ->
-      (* TODO: check length *)
-      List.combine ps types
-      |> List.concat_map (fun (p', ty') -> deconstruct_pattern_binder p' ty')
-  | PatternTuple _, _ -> not_implemented () (* TODO Error *)
+      if List.compare_lengths ps types <> 0 then
+        raise (TyExn (UnexpectedPatternForType (p, ty)))
+      else
+        List.combine ps types
+        |> List.concat_map (fun (p', ty') -> deconstruct_pattern_binder p' ty')
+  | PatternTuple _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternRecord lps, TypeRecord ftys ->
       (* TODO Check fields *)
       let types =
@@ -231,24 +237,24 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
         (fun (ALabelledPattern (StellaIdent name, p')) ->
           List.assoc name types |> deconstruct_pattern_binder p')
         lps
-  | PatternRecord _, _ -> not_implemented () (* TODO Error *)
+  | PatternRecord _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternList ps, TypeList ty' ->
       List.concat_map (fun p' -> deconstruct_pattern_binder p' ty') ps
-  | PatternList _, _ -> not_implemented () (* TODO Error *)
+  | PatternList _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternCons (p1, p2), TypeList ty' ->
       List.concat
         [ deconstruct_pattern_binder p1 ty'; deconstruct_pattern_binder p2 ty ]
-  | PatternCons _, _ -> not_implemented () (* TODO Error *)
+  | PatternCons _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternFalse, TypeBool -> []
-  | PatternFalse, _ -> not_implemented () (* TODO Error *)
+  | PatternFalse, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternTrue, TypeBool -> []
-  | PatternTrue, _ -> not_implemented () (* TODO Error *)
+  | PatternTrue, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternUnit, TypeUnit -> []
-  | PatternUnit, _ -> not_implemented () (* TODO Error *)
+  | PatternUnit, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternInt _, TypeNat -> []
-  | PatternInt _, _ -> not_implemented () (* TODO Error *)
+  | PatternInt _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternSucc p', TypeNat -> deconstruct_pattern_binder p' TypeNat
-  | PatternSucc _, _ -> not_implemented () (* TODO Error *)
+  | PatternSucc _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternVar (StellaIdent name), _ -> [ (name, ty) ]
   | _, _ -> not_implemented ()
 
@@ -341,37 +347,38 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
   | LessThan (e1, e2), _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | LessThanOrEqual (e1, e2), TypeBool ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
   | LessThanOrEqual (e1, e2), _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | GreaterThan (e1, e2), TypeBool ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
   | GreaterThan (e1, e2), _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | GreaterThanOrEqual (e1, e2), TypeBool ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
   | GreaterThanOrEqual (e1, e2), _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | Equal (e1, e2), TypeBool ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
   | Equal _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | NotEqual (e1, e2), TypeBool ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
   | NotEqual _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | TypeAsc (e1, ty'), _ ->
-      if ty <> ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
-      else check_type ty';
-      typecheck ctx e1 ty'
+      if ty <> ty' then
+        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+      else (
+        check_type ty';
+        typecheck ctx e1 ty')
   | Abstraction (params, expr'), TypeFun (tyParams, tyReturn) ->
       (* Check arity *)
       (* List.compare_lengths tyParams params = 0 *)
@@ -415,46 +422,46 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | Add (e1, e2), TypeNat ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
-  | Add _, _ -> raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
+  | Add _, _ -> raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
   | Subtract (e1, e2), TypeNat ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
   | Subtract _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
   | LogicOr (e1, e2), TypeBool ->
       typecheck ctx e1 TypeBool;
       typecheck ctx e2 TypeBool
   | LogicOr _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | Multiply (e1, e2), TypeNat ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
   | Multiply _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
   | Divide (e1, e2), TypeNat ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
   | Divide _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
   | LogicAnd (e1, e2), TypeBool ->
       typecheck ctx e1 TypeBool;
       typecheck ctx e2 TypeBool
   | LogicAnd _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | Application _, _ ->
       let ty' = infer ctx expr in
       if ty' <> ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | DotRecord _, _ ->
       let ty' = infer ctx expr in
       if ty' <> ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | DotTuple _, _ ->
       let ty' = infer ctx expr in
       if ty' <> ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | Tuple exprs, TypeTuple tyExprs ->
       if List.compare_lengths exprs tyExprs <> 0 then
@@ -532,58 +539,58 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | Head _, _ ->
       let ty' = infer ctx expr in
       if ty' <> ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | Tail _, _ ->
       let ty' = infer ctx expr in
       if ty' <> ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | IsEmpty _, _ ->
       let ty' = infer ctx expr in
       if ty' <> ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
   | Inl _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
   | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
   | Inr _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
   | Succ expr', TypeNat -> typecheck ctx expr' TypeNat
-  | Succ _, _ -> raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
+  | Succ _, _ -> raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
   | LogicNot expr', TypeBool -> typecheck ctx expr' TypeBool
   | LogicNot _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | Pred expr', TypeNat -> typecheck ctx expr' TypeNat
-  | Pred _, _ -> raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
-  | IsZero expr', TypeNat -> typecheck ctx expr' TypeNat
+  | Pred _, _ -> raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+  | IsZero expr', TypeBool -> typecheck ctx expr' TypeNat
   | IsZero _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
   | Fix _, _ ->
       let ty' = infer ctx expr in
       if ty' <> ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
   | NatRec (eN, eZ, eS), _ ->
       typecheck ctx eN TypeNat;
       typecheck ctx eZ ty;
       typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)))
   | ConstTrue, TypeBool -> ()
   | ConstTrue, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | ConstFalse, TypeBool -> ()
   | ConstFalse, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeBool, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | ConstUnit, TypeUnit -> ()
   | ConstUnit, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeUnit, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeUnit, expr)))
   | ConstInt _, TypeNat -> ()
   | ConstInt _, _ ->
-      raise (TyExn (UnexpectedTypeOfExpression (ty, TypeNat, expr)))
+      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
   | Var (StellaIdent name), _ -> (
       match get ctx name with
       | None -> raise (TyExn (UndefinedVariable (name, expr)))
       | Some ty' ->
           if ty <> ty' then
-            raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
+            raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
           else ())
   | a, _ ->
       print_endline (ShowStella.show (ShowStella.showExpr a));
@@ -761,7 +768,7 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
           if tyArg <> tyRet then
             raise
               (TyExn
-                 (UnexpectedTypeOfExpression
+                 (UnexpectedTypeForExpression
                     ( TypeFun ([ tyArg ], tyArg),
                       TypeFun ([ tyArg ], tyRet),
                       expr )))
