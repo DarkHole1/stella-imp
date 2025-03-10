@@ -313,6 +313,11 @@ let put_params (ctx : context) (params : paramDecl list) : context =
     ]
 
 let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
+  (* print_endline
+    ("Checking expr "
+    ^ PrintStella.printTree PrintStella.prtExpr expr
+    ^ " with type "
+    ^ PrintStella.printTree PrintStella.prtTypeT ty); *)
   match (expr, ty) with
   | Sequence (e1, e2), _ ->
       typecheck ctx e1 TypeUnit;
@@ -404,11 +409,9 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
           let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
           typecheck ctx' expr'' ty)
         cases
-  | List _, TypeList _ ->
-      let ty' = infer ctx expr in
-      if ty' <> ty then
-        raise (TyExn (UnexpectedTypeOfExpression (ty, ty', expr)))
-      else ()
+  | List exprs, TypeList ty' ->
+      List.iter (fun expr' -> typecheck ctx expr' ty') exprs
+  | List _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
   | Add (e1, e2), TypeNat ->
       typecheck ctx e1 TypeNat;
       typecheck ctx e2 TypeNat
@@ -520,7 +523,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
           raise (TyExn (UnexpectedRecordFields (extraFields, ty, expr)))
         else if List.compare_length_with missingFields 0 <> 0 then
           raise (TyExn (MissingRecordFields (missingFields, ty, expr)))
-        else List.iter (fun (expr', ty') -> typecheck ctx expr' ty) fieldExpr
+        else List.iter (fun (expr', ty') -> typecheck ctx expr' ty') fieldExpr
   | Record _, _ -> raise (TyExn (UnexpectedRecord (ty, expr)))
   | ConsList (e1, e2), TypeList ty' ->
       typecheck ctx e1 ty';
@@ -639,11 +642,23 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       let tyReturn = infer ctx' expr' in
       TypeFun (List.map (fun (AParamDecl (_, ty)) -> ty) params, tyReturn)
   | Variant _ -> raise (TyExn (AmbiguousVariantType expr))
-  (* | Match of expr * matchCase list TODO: PM is hard *)
+  | Match (_, []) -> raise (TyExn (IllegalEmptyMatching expr))
+  | Match (expr', AMatchCase (pat, expr'') :: cases) ->
+      let ty' = infer ctx expr' in
+      let tyRes =
+        let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
+        infer ctx' expr''
+      in
+      List.iter
+        (fun (AMatchCase (pat, expr'')) ->
+          let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
+          typecheck ctx' expr'' tyRes)
+        cases;
+      tyRes
   | List (expr' :: exprs) ->
       let ty = infer ctx expr' in
       List.iter (fun expr'' -> typecheck ctx expr'' ty) exprs;
-      ty
+      TypeList ty
   | List [] -> raise (TyExn (AmbiguousList expr))
   | Add (e1, e2) ->
       typecheck ctx e1 TypeNat;
@@ -750,7 +765,7 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
                     ( TypeFun ([ tyArg ], tyArg),
                       TypeFun ([ tyArg ], tyRet),
                       expr )))
-          else ty
+          else tyArg
       | _ -> raise (TyExn (NotAFunction (ty, expr))))
   | NatRec (eN, eZ, eS) ->
       typecheck ctx eN TypeNat;
