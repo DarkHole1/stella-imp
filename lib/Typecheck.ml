@@ -299,7 +299,7 @@ let rec check_type (ty : typeT) =
         |> find_dup
       in
       if List.compare_length_with dup 0 > 0 then
-        raise (TyExn (DuplicateRecordTypeFields (dup, ty)))
+        raise (TyExn (DuplicateVariantTypeFields (dup, ty)))
       else
         List.filter_map
           (fun (AVariantFieldType (_, typing)) ->
