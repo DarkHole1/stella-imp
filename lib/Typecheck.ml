@@ -191,7 +191,7 @@ let rec get (ctx : context) (s : string) : typeT option =
   | (s', ty) :: ctx' -> if s = s' then Some ty else get ctx' s
   | _ -> None
 
-let checkMain (ctx : context) : unit =
+let check_main (ctx : context) : unit =
   match get ctx "main" with None -> raise (TyExn MissingMain) | _ -> ()
 
 let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
@@ -806,7 +806,7 @@ let typecheckProgram (program : program) =
             | _ -> not_implemented ())
           [] decls
       in
-      checkMain ctx;
+      check_main ctx;
       List.fold_left
         (fun _ decl ->
           match decl with
