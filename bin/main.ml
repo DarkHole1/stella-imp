@@ -40,7 +40,7 @@ let main () =
         (end_pos.pos_cnum - end_pos.pos_bol + 1);
       exit 1
   | Typecheck.TyExn err ->
-      print_endline (Typecheck.showError err);
+      print_endline (Typecheck.show_error err);
       exit 2
 ;;
 

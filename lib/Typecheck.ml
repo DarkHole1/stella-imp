@@ -35,152 +35,160 @@ exception TyExn of tyError
 
 let not_implemented () = raise (Failure "Not implemented")
 
-let showError (err : tyError) : string =
+let pad_doc (pad_size : int) (d : PrintStella.doc) =
+ fun buf i -> d buf (i + pad_size)
+
+let pad_prt (pad_size : int) (prt : int -> 'a -> PrintStella.doc) =
+ fun i e -> prt i e |> pad_doc pad_size
+
+let default_pad (prt : int -> 'a -> PrintStella.doc) = pad_prt 4 prt
+
+let show_error (err : tyError) : string =
   match err with
   | MissingMain -> "ERROR_MISSING_MAIN\n  в программе отсутствует функция main"
   | UndefinedVariable (name, expr) ->
       "ERROR_UNDEFINED_VARIABLE\n  неизвестная переменная\n    " ^ name
       ^ "\n  в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedTypeForExpression (ty1, ty2, expr) ->
       "ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION\n  ожидался тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty1
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty1
       ^ "\n  но получен тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty2
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty2
       ^ "\n  в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | NotAFunction (ty, expr) ->
       "ERROR_NOT_A_FUNCTION\n  ожидалась функция в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
       ^ "\n  но получен тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
   | NotATuple (ty, expr) ->
       "ERROR_NOT_A_TUPLE\n  ожидался кортёж в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
       ^ "\n  но получен тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
   | NotARecord (ty, expr) ->
       "ERROR_NOT_A_RECORD\n  ожидалась запись в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
       ^ "\n  но получен тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
   | NotAList (ty, expr) ->
       "ERROR_NOT_A_LIST\n  ожидался список в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
       ^ "\n  но получен тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
   | UnexpectedLambda (ty, expr) ->
       "ERROR_UNEXPECTED_LAMBDA\n  ожидался тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  но получена лямбда в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedTypeForParameter (ty1, ty2, AParamDecl (StellaIdent name, _)) ->
       "ERROR_UNEXPECTED_TYPE_FOR_PARAMETER\n  для параметра\n    " ^ name
       ^ "\n  ожидался тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty1
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty1
       ^ "\n  но получен тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty2
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty2
   | UnexpectedTuple (ty, expr) ->
       "ERROR_UNEXPECTED_TUPLE\n  ожидался тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  но получен кортёж в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedRecord (ty, expr) ->
       "ERROR_UNEXPECTED_RECORD\n  ожидался тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  но получена запись в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedVariant (ty, expr) ->
       "ERROR_UNEXPECTED_VARIANT\n  ожидался тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  но получен вариант в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedList (ty, expr) ->
       "ERROR_UNEXPECTED_LIST\n  ожидался тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  но получен список в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedInjection (ty, expr) ->
       "ERROR_UNEXPECTED_INJECTION\n  ожидался тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  но получена инъекция в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | MissingRecordFields (missing, ty, expr) ->
       "ERROR_MISSING_RECORD_FIELDS\n  отсуствуют поля\n    "
       ^ String.concat "\n    " missing
       ^ "\n  для типа\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedRecordFields (extra, ty, expr) ->
       "ERROR_UNEXPECTED_RECORD_FIELDS\n  присутствуют лишние поля\n    "
       ^ String.concat "\n    " extra
       ^ "\n  для типа\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedFieldAccess (ty, field, expr) ->
       "ERROR_UNEXPECTED_FIELD_ACCESS\n  в типе\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  отсутствует поле\n    " ^ field ^ "\n  в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedVariantLabel (ty, variant, expr) ->
       "ERROR_UNEXPECTED_VARIANT_LABEL\n  в типе\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  отсутствует вариант\n    " ^ variant ^ "\n  в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | TupleIndexOutOfBounds (ty, index, expr) ->
       "ERROR_TUPLE_INDEX_OUT_OF_BOUNDS\n  индекс\n    " ^ Int.to_string index
       ^ "\n  выходит за пределы тип\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | UnexpectedTupleLength (len1, len2, expr) ->
       "ERROR_UNEXPECTED_TUPLE_LENGTH\n  ожидался кортёж длиной\n    "
       ^ Int.to_string len1 ^ "\n  но получен кортёж длиной\n    "
       ^ Int.to_string len2 ^ "\n  в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | AmbiguousSumType expr ->
       "ERROR_AMBIGUOUS_SUM_TYPE\n\
       \  невозможно определить тип инъекции в выражении\n\
       \    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | AmbiguousVariantType expr ->
       "ERROR_AMBIGUOUS_VARIANT_TYPE\n\
       \  невозможно определить тип варианта в выражении\n\
       \    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | AmbiguousList expr ->
       "ERROR_AMBIGUOUS_LIST\n\
       \  невозможно определить тип списка в выражении\n\
       \    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | IllegalEmptyMatching expr ->
       "ERROR_ILLEGAL_EMPTY_MATCHING\n\
       \  match-выражение с пустым списком альтернатив\n\
       \    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
   | NonexhaustiveMatchPatterns (expr_unmatched, expr_full) ->
       "ERROR_NONEXHAUSTIVE_MATCH_PATTERNS\n  выражение\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr_full
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr_full
       ^ "\n  не покрывает значение\n    "
       ^ PrintStella.printTree PrintStella.prtExpr expr_unmatched
   | UnexpectedPatternForType (pat, ty) ->
       "ERROR_UNEXPECTED_PATTERN_FOR_TYPE\n  образец\n    "
-      ^ PrintStella.printTree PrintStella.prtPattern pat
+      ^ PrintStella.printTree (default_pad PrintStella.prtPattern) pat
       ^ "\n  не соответствует типу\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
   | DuplicateRecordFields (dup, ty, expr) ->
       "ERROR_DUPLICATE_RECORD_FIELDS\n  в выражении\n    "
-      ^ PrintStella.printTree PrintStella.prtExpr expr
+      ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
       ^ "\n  дублируются поля\n    " ^ String.concat "\n    " dup
   | DuplicateRecordTypeFields (dup, ty) ->
       "ERROR_DUPLICATE_RECORD_TYPE_FIELDS\n  в типа\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  дублируются поля\n    " ^ String.concat "\n    " dup
   | DuplicateVariantTypeFields (dup, ty) ->
       "ERROR_DUPLICATE_VARIANT_TYPE_FIELDS\n  в типа\n    "
-      ^ PrintStella.printTree PrintStella.prtTypeT ty
+      ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
       ^ "\n  дублируются варианты\n    " ^ String.concat "\n    " dup
 
 type context = (string * typeT) list
