@@ -6,6 +6,6 @@
 
 (package
  (name stella)
- (depends ocaml)
-)
-
+ (depends
+  ocaml
+  (alcotest :with-test)))
