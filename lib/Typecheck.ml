@@ -25,7 +25,7 @@ type tyError =
   | AmbiguousVariantType of expr
   | AmbiguousList of expr
   | IllegalEmptyMatching of expr
-  | NonexhaustiveMatchPatterns
+  | NonexhaustiveMatchPatterns of expr * expr
   | UnexpectedPatternForType of pattern * typeT
   | DuplicateRecordFields of string list * typeT * expr
   | DuplicateRecordTypeFields of string list * typeT
@@ -160,9 +160,11 @@ let showError (err : tyError) : string =
       \  match-выражение с пустым списком альтернатив\n\
       \    "
       ^ PrintStella.printTree PrintStella.prtExpr expr
-  (* 
-  | NonexhaustiveMatchPatterns
-  *)
+  | NonexhaustiveMatchPatterns (expr_unmatched, expr_full) ->
+      "ERROR_NONEXHAUSTIVE_MATCH_PATTERNS\n  выражение\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr_full
+      ^ "\n  не покрывает значение\n    "
+      ^ PrintStella.printTree PrintStella.prtExpr expr_unmatched
   | UnexpectedPatternForType (pat, ty) ->
       "ERROR_UNEXPECTED_PATTERN_FOR_TYPE\n  образец\n    "
       ^ PrintStella.printTree PrintStella.prtPattern pat
@@ -180,7 +182,6 @@ let showError (err : tyError) : string =
       "ERROR_DUPLICATE_VARIANT_TYPE_FIELDS\n  в типа\n    "
       ^ PrintStella.printTree PrintStella.prtTypeT ty
       ^ "\n  дублируются варианты\n    " ^ String.concat "\n    " dup
-  | _ -> not_implemented ()
 
 type context = (string * typeT) list
 
@@ -608,14 +609,17 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       typecheck ctx expr' ty'
   | Variant _, _ -> raise (TyExn (UnexpectedVariant (ty, expr)))
   | Match (_, []), _ -> raise (TyExn (IllegalEmptyMatching expr))
-  | Match (expr', cases), _ ->
-      (* TODO: Exhaustive check *)
+  | Match (expr', cases), _ -> (
       let ty' = infer ctx expr' in
       List.iter
         (fun (AMatchCase (pat, expr'')) ->
           let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
           typecheck ctx' expr'' ty)
-        cases
+        cases;
+      let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
+      match check_exhaustivness ps ty' with
+      | Some expr'' -> raise (TyExn (NonexhaustiveMatchPatterns (expr'', expr)))
+      | None -> ())
   | List exprs, TypeList ty' ->
       List.iter (fun expr' -> typecheck ctx expr' ty') exprs
   | List _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
@@ -861,6 +865,10 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
           let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
           typecheck ctx' expr'' tyRes)
         cases;
+      let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
+      (match check_exhaustivness ps ty' with
+      | Some expr'' -> raise (TyExn (NonexhaustiveMatchPatterns (expr'', expr)))
+      | None -> ());
       tyRes
   | List (expr' :: exprs) ->
       let ty = infer ctx expr' in
