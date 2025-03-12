@@ -194,6 +194,206 @@ let rec get (ctx : context) (s : string) : typeT option =
 let check_main (ctx : context) : unit =
   match get ctx "main" with None -> raise (TyExn MissingMain) | _ -> ()
 
+let rec synthesis_by_type (ty : typeT) : expr =
+  match ty with
+  (*
+  | TypeAuto
+  | TypeFun of typeT list * typeT
+  | TypeForAll of stellaIdent list * typeT
+  | TypeRec of stellaIdent * typeT
+  *)
+  | TypeSum (tyL, tyR) -> Inl (synthesis_by_type tyL)
+  | TypeTuple types -> Tuple (List.map synthesis_by_type types)
+  | TypeRecord fieldTypes ->
+      let fields =
+        List.map
+          (fun (ARecordFieldType (ident, ty)) ->
+            ABinding (ident, synthesis_by_type ty))
+          fieldTypes
+      in
+      Record fields
+  | TypeVariant (AVariantFieldType (ident, typing) :: _) ->
+      let data =
+        match typing with
+        | SomeTyping ty -> SomeExprData (synthesis_by_type ty)
+        | NoTyping -> NoExprData
+      in
+      Variant (ident, data)
+  | TypeList _ -> List []
+  | TypeBool -> ConstFalse
+  | TypeNat -> ConstInt 0
+  | TypeUnit -> ConstUnit
+  (*
+  | TypeTop
+  | TypeBottom
+  | TypeRef of typeT
+  | TypeVar of stellaIdent
+  *)
+  | _ -> not_implemented ()
+
+let rec matches (p : pattern) (term : expr) : bool =
+  match (p, term) with
+  (*
+    | PatternCastAs of pattern * typeT
+    *)
+  | PatternAsc (p', _), _ -> matches p' term
+  | PatternVariant (ident, NoPatternData), Variant (ident', NoExprData) ->
+      ident = ident'
+  | ( PatternVariant (ident, SomePatternData p'),
+      Variant (ident', SomeExprData expr') ) ->
+      ident = ident' && matches p' expr'
+  | PatternInl p', Inl expr' -> matches p' expr'
+  | PatternInr p', Inr expr' -> matches p' expr'
+  | PatternTuple ps, Tuple exprs -> List.for_all2 matches ps exprs
+  | PatternRecord lps, Record fields ->
+      let fields' =
+        List.map (fun (ABinding (ident, expr)) -> (ident, expr)) fields
+      in
+      List.map
+        (fun (ALabelledPattern (ident, p')) -> (p', List.assoc ident fields'))
+        lps
+      |> List.for_all (fun (p', expr') -> matches p' expr')
+  | PatternList ps, List exprs ->
+      List.compare_lengths ps exprs = 0 && List.for_all2 matches ps exprs
+  | PatternCons (p1, p2), List (e1 :: e2) ->
+      matches p1 e1 && matches p2 (List e2)
+  | PatternFalse, ConstFalse -> true
+  | PatternTrue, ConstTrue -> true
+  | PatternUnit, ConstUnit -> true
+  | PatternInt n, ConstInt n' -> n = n'
+  | PatternSucc p', ConstInt n -> n > 0 && matches p' (ConstInt (n - 1))
+  | PatternVar _, _ -> true
+  | _ -> false
+
+let[@warning "-partial-match"] next_variant (Variant (ident, _))
+    (TypeVariant fields) =
+  let index =
+    List.mapi (fun a b -> (b, a)) fields
+    |> List.find_map (fun (AVariantFieldType (ident', _), idx) ->
+           if ident = ident' then Some idx else None)
+    |> Option.get
+  in
+  match List.nth_opt fields (index + 1) with
+  | Some (AVariantFieldType (ident', NoTyping)) ->
+      Some (Variant (ident, NoExprData))
+  | Some (AVariantFieldType (ident', SomeTyping ty')) ->
+      Some (Variant (ident, SomeExprData (synthesis_by_type ty')))
+  | None -> None
+
+let rec next_unmatched (p : pattern) (term : expr) (ty : typeT) : expr option =
+  match (p, term, ty) with
+  (*
+    | PatternCastAs of pattern * typeT
+    *)
+  | PatternAsc (p', _), _, _ -> next_unmatched p' term ty
+  | ( PatternVariant (ident, NoPatternData),
+      Variant (_, NoExprData),
+      TypeVariant fields ) ->
+      next_variant term ty
+  | ( PatternVariant (ident, SomePatternData p'),
+      Variant (_, SomeExprData expr'),
+      TypeVariant fields ) -> (
+      let ty =
+        List.find_map
+          (fun (AVariantFieldType (ident', ty)) ->
+            if ident = ident' then
+              match ty with SomeTyping ty' -> Some ty' | NoTyping -> None
+            else None)
+          fields
+        |> Option.get
+      in
+      match next_unmatched p' expr' ty with
+      | Some expr'' -> Some (Variant (ident, SomeExprData expr''))
+      | None -> next_variant term ty)
+  | PatternInl p', Inl expr', TypeSum (tyL, tyR) -> (
+      match next_unmatched p' expr' tyL with
+      | Some expr'' -> Some (Inl expr'')
+      | None -> Some (Inr (synthesis_by_type tyR)))
+  | PatternInr p', Inr expr', TypeSum (tyL, tyR) -> (
+      match next_unmatched p' expr' tyR with
+      | Some expr'' -> Some (Inr expr'')
+      | None -> None)
+  | PatternTuple (p' :: ps), Tuple (expr' :: exprs), TypeTuple (ty' :: tys) -> (
+      match next_unmatched (PatternTuple ps) (Tuple exprs) (TypeTuple tys) with
+      | Some (Tuple exprs') -> Some (Tuple (expr' :: exprs'))
+      | _ -> (
+          match next_unmatched p' expr' ty' with
+          | Some expr'' ->
+              Some (Tuple (expr'' :: List.map synthesis_by_type tys))
+          | _ -> None))
+  | ( PatternRecord (ALabelledPattern (ident, lp) :: lps),
+      Record fields,
+      TypeRecord tys ) -> (
+      let tysL =
+        List.map (fun (ARecordFieldType (ident, ty)) -> (ident, ty)) tys
+      in
+      let fieldsL =
+        List.map (fun (ABinding (ident, field)) -> (ident, field)) fields
+      in
+      let ty = List.assoc ident tysL in
+      let expr' = List.assoc ident fieldsL in
+      let tys' =
+        List.filter (fun (ARecordFieldType (ident', _)) -> ident <> ident') tys
+      in
+      let fields' =
+        List.filter (fun (ABinding (ident', _)) -> ident <> ident') fields
+      in
+      match
+        next_unmatched (PatternRecord lps) (Record fields') (TypeRecord tys')
+      with
+      | Some (Record fields'') ->
+          Some (Record (ABinding (ident, expr') :: fields''))
+      | _ -> (
+          match next_unmatched lp expr' ty with
+          | Some expr'' ->
+              let fields'' =
+                ABinding (ident, expr'')
+                :: List.map
+                     (fun (ARecordFieldType (ident, ty')) ->
+                       ABinding (ident, synthesis_by_type ty'))
+                     tys'
+              in
+              Some (Record fields'')
+          | None -> None))
+  | PatternList (p' :: ps), List (expr' :: exprs), TypeList ty' -> (
+      match next_unmatched (PatternList ps) (List exprs) ty with
+      | Some (List exprs') -> Some (List (expr' :: exprs'))
+      | _ -> (
+          match next_unmatched p' expr' ty' with
+          | Some expr'' -> Some (List [ expr'' ])
+          | None -> None))
+  | PatternList [], List [], TypeList ty' ->
+      Some (List [ synthesis_by_type ty' ])
+  | PatternCons (p1, p2), List (e1 :: e2), TypeList ty' -> (
+      match next_unmatched p2 (List e2) ty with
+      | Some (List exprs') -> Some (List (e1 :: exprs'))
+      | _ -> (
+          match next_unmatched p1 e1 ty' with
+          | Some expr'' -> Some (List [ expr'' ])
+          | None -> None))
+  | PatternFalse, ConstFalse, TypeBool -> Some ConstTrue
+  | PatternTrue, ConstTrue, TypeBool -> None
+  | PatternUnit, ConstUnit, TypeUnit -> None
+  | PatternInt n, ConstInt _, TypeNat -> Some (ConstInt (n + 1))
+  | PatternSucc p', ConstInt n, TypeNat -> (
+      match next_unmatched p' (ConstInt (n - 1)) TypeNat with
+      | Some (ConstInt n') -> Some (ConstInt (n' + 1))
+      | _ -> None)
+  | PatternVar _, _, _ -> None
+  | _ -> None
+
+let check_exhaustivness (ps : pattern list) (ty : typeT) : expr option =
+  let init = synthesis_by_type ty in
+  let rec check_exhaustivness' (term : expr) : expr option =
+    match List.find_opt (fun p -> matches p term) ps with
+    | Some p -> (
+        match next_unmatched p term ty with
+        | Some term' -> check_exhaustivness' term'
+        | None -> None)
+    | None -> Some term
+  in
+  check_exhaustivness' init
+
 let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
   match (p, ty) with
   (*
