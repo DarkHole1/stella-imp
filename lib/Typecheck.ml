@@ -276,9 +276,9 @@ let[@warning "-partial-match"] next_variant (Variant (ident, _))
   in
   match List.nth_opt fields (index + 1) with
   | Some (AVariantFieldType (ident', NoTyping)) ->
-      Some (Variant (ident, NoExprData))
+      Some (Variant (ident', NoExprData))
   | Some (AVariantFieldType (ident', SomeTyping ty')) ->
-      Some (Variant (ident, SomeExprData (synthesis_by_type ty')))
+      Some (Variant (ident', SomeExprData (synthesis_by_type ty')))
   | None -> None
 
 let rec next_unmatched (p : pattern) (term : expr) (ty : typeT) : expr option =
@@ -294,7 +294,7 @@ let rec next_unmatched (p : pattern) (term : expr) (ty : typeT) : expr option =
   | ( PatternVariant (ident, SomePatternData p'),
       Variant (_, SomeExprData expr'),
       TypeVariant fields ) -> (
-      let ty =
+      let ty' =
         List.find_map
           (fun (AVariantFieldType (ident', ty)) ->
             if ident = ident' then
@@ -303,7 +303,7 @@ let rec next_unmatched (p : pattern) (term : expr) (ty : typeT) : expr option =
           fields
         |> Option.get
       in
-      match next_unmatched p' expr' ty with
+      match next_unmatched p' expr' ty' with
       | Some expr'' -> Some (Variant (ident, SomeExprData expr''))
       | None -> next_variant term ty)
   | PatternInl p', Inl expr', TypeSum (tyL, tyR) -> (
