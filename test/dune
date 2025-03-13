@@ -1,4 +1,4 @@
 (test
  (name test)
- (modules test)
+ (modules test utils)
  (libraries stella alcotest))

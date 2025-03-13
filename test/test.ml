@@ -1,32 +1,19 @@
-open Stella
-
-let pp (s : 'a -> ShowStella.showable) (fmt : Format.formatter) (v : 'a) : unit
-    =
-  Format.pp_print_string fmt (ShowStella.show (s v))
-
-let pp_expr = pp ShowStella.showExpr
-let pp_typeT = pp ShowStella.showTypeT
-let[@warning "-unused-value-declaration"] expr = Alcotest.testable pp_expr ( = )
-let typeT = Alcotest.testable pp_typeT ( = )
+open Utils
 
 let test_basic_typecheck () =
-  Typecheck.typecheck [] ConstTrue TypeBool;
-  Typecheck.typecheck [] ConstFalse TypeBool;
-  Typecheck.typecheck [] (ConstInt 0) TypeNat;
-  Typecheck.typecheck [] ConstUnit TypeUnit
+  check_typecheck' "true <= Bool" "true" "Bool";
+  check_typecheck' "false <= Bool" "false" "Bool";
+  check_typecheck' "0 <= Nat" "0" "Nat";
+  check_typecheck' "unit <= Unit" "unit" "Unit"
 
-(* TODO *)
 let test_parametrized_typecheck () =
-  Typecheck.typecheck [] ConstTrue TypeBool;
-  Typecheck.typecheck [] ConstFalse TypeBool;
-  Typecheck.typecheck [] (ConstInt 0) TypeNat;
-  Typecheck.typecheck [] ConstUnit TypeUnit
+  check_typecheck "[true] <= [Bool]" [] "[true]" "[Bool]"
 
 let test_basic_infer () =
-  Alcotest.check typeT "true => Bool" TypeBool (Typecheck.infer [] ConstTrue);
-  Alcotest.check typeT "false => Bool" TypeBool (Typecheck.infer [] ConstFalse);
-  Alcotest.check typeT "0 => Nat" TypeNat (Typecheck.infer [] (ConstInt 0));
-  Alcotest.check typeT "unit => Unit" TypeUnit (Typecheck.infer [] ConstUnit)
+  check_infer' "true => Bool" "Bool" "true";
+  check_infer' "false => Bool" "Bool" "false";
+  check_infer' "0 => Nat" "Nat" "0";
+  check_infer' "unit => Unit" "Unit" "unit"
 
 let () =
   Alcotest.run "Typecheck"
