@@ -992,7 +992,7 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       | _ -> raise (TyExn (NotAFunction (ty, expr))))
   | NatRec (eN, eZ, eS) ->
       typecheck ctx eN TypeNat;
-      let ty = infer ctx eN in
+      let ty = infer ctx eZ in
       typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)));
       ty
   | ConstTrue -> TypeBool
