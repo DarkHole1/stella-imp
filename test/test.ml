@@ -63,6 +63,10 @@ let test_operations () =
   check "{ 0, true }.2 <=> Bool" (o |- "{ 0, true }.2" <=> "Bool");
   check "{ 0, true, unit }.2 <=> Bool" (o |- "{ 0, true, unit }.2" <=> "Bool");
 
+  check "List::head ([0, 0]) <=> Nat" (o |- "List::head ([0, 0])" <=> "Nat");
+  check "List::tail ([true, false]) <=> [Bool]" (o |- "List::tail ([true, false])" <=> "[Bool]");
+  check "List::isempty ([unit]) <=> Bool" (o |- "List::isempty ([unit])" <=> "Bool");
+
   check "{ a = 0, b = unit, foo = true }.a <=> Nat"
     (o |- "{ a = 0, b = unit, foo = true }.a" <=> "Nat");
   check "{ a = 0, b = unit, foo = true }.b <=> Unit"
@@ -99,7 +103,14 @@ let test_functions () =
    <=> "Unit")
 
 let test_basic_errors () =
-  check_err "unexpected variable" E.undefined_variable (o |- "x" <=> "Bool")
+  check_err "unexpected variable" E.undefined_variable (o |- "x" <=> "Bool");
+  check_err "not a function (call)" E.not_a_function (o |- "(true) ()" <=> "Bool");
+  check_err "not a function (fix)" E.not_a_function (o |- "fix(0)" <=> "Nat");
+  check_err "not a tuple" E.not_a_tuple (o |- "unit . 1" <=> "Unit");
+  check_err "not a record" E.not_a_record (o |- "0 . a" <=> "Nat");
+  check_err "not a list (head)" E.not_a_list (o |- "List::head (0)" <=> "Nat");
+  check_err "not a list (tail)" E.not_a_list (o |- "List::tail (unit)" <=> "[Unit]");
+  check_err "not a list (isempty)" E.not_a_list (o |- "List::isempty (true)" <=> "Bool")
 
 let () =
   Alcotest.run "Typecheck"
