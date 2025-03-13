@@ -81,6 +81,23 @@ let test_operations () =
     (o |- "<| b = false |> as <| a : Nat, b : Bool |>"
    <=> "<| a : Nat, b : Bool |>")
 
+let test_functions () =
+  check "fn (x : Nat) { return x } <=> fn (Nat) -> Nat"
+    (o |- "fn (x : Nat) { return x }" <=> "fn (Nat) -> Nat");
+  check "fn (x : Nat) { return false } <=> fn (Nat) -> Bool"
+    (o |- "fn (x : Nat) { return false }" <=> "fn (Nat) -> Bool");
+  check "fn (x : Nat + Bool) { return x } <=> fn (Nat + Bool) -> Nat + Bool"
+    (o |- "fn (x : Nat + Bool) { return x }" <=> "fn (Nat + Bool) -> Nat + Bool");
+  check "(fn (x : Nat) { return x }) (0) <=> Nat"
+    (o |- "(fn (x : Nat) { return x }) (0)" <=> "Nat");
+  check "fix (fn (x : Nat) { return x }) <=> Nat"
+    (o |- "fix (fn (x : Nat) { return x })" <=> "Nat");
+  check
+    "Nat::rec(0, unit, fn (_: Nat) { return fn (x : Unit) { return x; }}) <=> \
+     Unit"
+    (o |- "Nat::rec(0, unit, fn (_ : Nat) { return fn (x : Unit) { return x }})"
+   <=> "Unit")
+
 let () =
   Alcotest.run "Typecheck"
     [
@@ -91,7 +108,8 @@ let () =
           Alcotest.test_case "Nested types" `Quick test_nested;
           Alcotest.test_case "Basic operations" `Quick test_operations;
         ] );
-      ("function-typecheck", []);
+      ( "function-typecheck",
+        [ Alcotest.test_case "Functions test" `Quick test_functions ] );
       ("basic-errors", []);
       ("match-typecheck", []);
       ("extensions", []);
