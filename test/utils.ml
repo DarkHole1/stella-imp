@@ -40,3 +40,25 @@ let check_infer (d : string) (ty : string) (ctx : Typecheck.context)
 let check_infer' (d : string) (ty : string) (expr : string) =
   let ty' = parse_string_typeT ty in
   Alcotest.check typeT d ty' (infer [] expr)
+
+let o : Typecheck.context = []
+
+let in_context (ctx : Typecheck.context) (expr : string) = (ctx, expr)
+
+let check_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
+ fun (d : string) -> check_typecheck d ctx expr ty
+
+let infer_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
+ fun (d : string) -> check_infer d ty ctx expr
+
+let both_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
+ fun (d : string) ->
+  check_typecheck d ctx expr ty;
+  check_infer d ty ctx expr
+
+let check (d : string) (f : string -> unit) = f d
+
+let (|-) = in_context
+let (<=) = check_with
+let (=>) = infer_with
+let (<=>) = both_with
