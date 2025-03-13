@@ -38,6 +38,24 @@ let test_parametrized_typecheck () =
     "<| failure = unit |> <= <| success : Bool, failure : Unit |>"
     "<| failure = unit |>" "<| success : Bool, failure : Unit |>"
 
+let test_nested_typecheck () =
+  check_typecheck' "{{{{{{{{{{0}}}}}}}}}} <= {{{{{{{{{{Nat}}}}}}}}}}"
+    "{{{{{{{{{{0}}}}}}}}}}" "{{{{{{{{{{Nat}}}}}}}}}}";
+  check_typecheck'
+    "{a = {true, 0}, b = [unit, unit]} <= {a : {Bool, Nat}, b : [Unit]}"
+    "{a = {true, 0}, b = [unit, unit]}" "{a : {Bool, Nat}, b : [Unit]}";
+
+  check_typecheck'
+    "inl(<| hello = [true, false] |>) <= <| hello = [Bool] |> + <| world = {{ \
+     c : Unit }} |>"
+    "inl(<| hello = [true, false] |>)"
+    "<| hello : [Bool] |> + <| world : {{ c : Unit }} |>";
+  check_typecheck'
+    "inr(<| world = {{c = unit}} |>) <= <| hello = [Bool] |> + <| world = {{ c \
+     : Unit }} |>"
+    "inl(<| hello = [true, false] |>)"
+    "<| hello : [Bool] |> + <| world : {{ c : Unit }} |>"
+
 let test_basic_infer () =
   check_infer' "true => Bool" "Bool" "true";
   check_infer' "false => Bool" "Bool" "false";
@@ -62,6 +80,13 @@ let test_parametrized_infer () =
     "{a : Bool, b : Unit, foo_bar : Nat}" "{a = true, b = unit, foo_bar = 0}";
   check_infer' "{} => {}" "{}" "{}"
 
+let test_nested_infer () =
+  check_infer' "{{{{{{{{{{0}}}}}}}}}} <= {{{{{{{{{{Nat}}}}}}}}}}"
+    "{{{{{{{{{{Nat}}}}}}}}}}" "{{{{{{{{{{0}}}}}}}}}}";
+  check_infer'
+    "{a = {true, 0}, b = [unit, unit]} <= {a : {Bool, Nat}, b : [Unit]}"
+    "{a : {Bool, Nat}, b : [Unit]}" "{a = {true, 0}, b = [unit, unit]}"
+
 let () =
   Alcotest.run "Typecheck"
     [
@@ -73,5 +98,8 @@ let () =
             test_parametrized_typecheck;
           Alcotest.test_case "Infer parametrized types" `Quick
             test_parametrized_infer;
+          Alcotest.test_case "Typecheck nested types" `Quick
+            test_nested_typecheck;
+          Alcotest.test_case "Infer nested types" `Quick test_nested_infer;
         ] );
     ]
