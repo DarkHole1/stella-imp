@@ -98,6 +98,9 @@ let test_functions () =
     (o |- "Nat::rec(0, unit, fn (_ : Nat) { return fn (x : Unit) { return x }})"
    <=> "Unit")
 
+let test_basic_errors () =
+  check_err "unexpected variable" E.undefined_variable (o |- "x" <=> "Bool")
+
 let () =
   Alcotest.run "Typecheck"
     [
@@ -110,7 +113,8 @@ let () =
         ] );
       ( "function-typecheck",
         [ Alcotest.test_case "Functions test" `Quick test_functions ] );
-      ("basic-errors", []);
+      ( "basic-errors",
+        [ Alcotest.test_case "Basic errors" `Quick test_basic_errors ] );
       ("match-typecheck", []);
       ("extensions", []);
     ]
