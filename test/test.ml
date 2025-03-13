@@ -73,8 +73,8 @@ let test_operations_typecheck () =
     "{ a = 0, b = unit, foo = true }.foo" "Bool";
 
   check_typecheck' "true as Bool <= Bool" "true as Bool" "Bool";
-  check_typecheck' "inl(0) as (Nat + Unit) <= Nat + Unit" "inl(0) as (Nat + Unit)"
-    "Nat + Unit";
+  check_typecheck' "inl(0) as (Nat + Unit) <= Nat + Unit"
+    "inl(0) as (Nat + Unit)" "Nat + Unit";
   check_typecheck' "inr(unit) as (Nat + Unit) <= Nat + Unit"
     "inr(unit) as (Nat + Unit)" "Nat + Unit";
   check_typecheck'
@@ -162,4 +162,7 @@ let () =
           Alcotest.test_case "Infer basic operations" `Quick
             test_operations_infer;
         ] );
+      ("function-typecheck", []);
+      ("basic-errors", []);
+      ("match-typecheck", []);
     ]
