@@ -118,7 +118,20 @@ let test_basic_errors () =
   check_err "unexpected variant" E.unexpected_variant (o |- "<| abryvalg = unit |>" <= "Unit");
   check_err "unexpected list" E.unexpected_list (o |- "[0, 0]" <= "Nat");
   check_err "unexpected injection (left)" E.unexpected_injection (o |- "inl(true)" <= "Bool");
-  check_err "unexpected injection (right)" E.unexpected_injection (o |- "inr(0)" <= "Nat")
+  check_err "unexpected injection (right)" E.unexpected_injection (o |- "inr(0)" <= "Nat");
+  check_err "missing record fields 1" E.missing_record_fields (o |- "{bar = unit}" <= "{ foo : Nat, bar : Unit }");
+  check_err "missing record fields 2" E.missing_record_fields (o |- "{foo = 0}" <= "{ foo : Nat, bar : Unit }");
+  check_err "unexpected record fields 1" E.unexpected_record_fields (o |- "{foo = 0, baz = unit}" <= "{ foo : Nat }");
+  check_err "unexpected record fields 2" E.unexpected_record_fields (o |- "{foo = 0, baz = unit}" <= "{ baz : Unit }");
+  check_err "unexpected field access" E.unexpected_field_access (o |- "{foo = true}.fo" <=> "Bool");
+  check_err "unexpected variant label" E.unexpected_variant_label (o |- "<| foo = 0 |>" <= "<| fooo : Nat |>");
+  check_err "ambiguous sum type (left)" E.ambiguous_sum_type (o |- "inl(true)" => "Bool + Unit");
+  check_err "ambiguous sum type (right)" E.ambiguous_sum_type (o |- "inr(unit)" => "Bool + Unit");
+  check_err "ambiguous variant type" E.ambiguous_variant_type (o |- "<| success = true |>" => "<| success : Bool |>");
+  check_err "ambiguous list" E.ambiguous_list (o |- "[]" => "[Unit]");
+  (* Empty and non-exhaustive matching and unexpected patter will be in match tests *)
+  check_err "duplicate record fields" E.duplicate_record_fields (o |- "{ foo = 0, bar = unit, foo = 0 }" <=> "{ foo : Nat, bar : Unit }")
+  (* check_err "duplicate record type fields" E.duplicate_record_fields (o |- "{ foo = 0, bar = unit, foo = 0 }" <=> "{ foo : Nat, bar : Unit }"); *)
 
 let () =
   Alcotest.run "Typecheck"
