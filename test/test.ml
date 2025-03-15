@@ -110,7 +110,15 @@ let test_basic_errors () =
   check_err "not a record" E.not_a_record (o |- "0 . a" <=> "Nat");
   check_err "not a list (head)" E.not_a_list (o |- "List::head (0)" <=> "Nat");
   check_err "not a list (tail)" E.not_a_list (o |- "List::tail (unit)" <=> "[Unit]");
-  check_err "not a list (isempty)" E.not_a_list (o |- "List::isempty (true)" <=> "Bool")
+  check_err "not a list (isempty)" E.not_a_list (o |- "List::isempty (true)" <=> "Bool");
+  check_err "unexpected lambda" E.unexpected_lambda (o |- "fn (a : Nat) { return b }" <= "Unit");
+  check_err "unexpected type for parameter" E.unexpected_type_for_parameter (o |- "fn (a : Unit) { return b }" <= "fn (Nat) -> Nat");
+  check_err "unexpected tuple" E.unexpected_tuple (o |- "{0, 0, 0}" <= "Nat");
+  check_err "unexpected record" E.unexpected_record (o |- "{ foo = 0, bar = false }" <= "Bool");
+  check_err "unexpected variant" E.unexpected_variant (o |- "<| abryvalg = unit |>" <= "Unit");
+  check_err "unexpected list" E.unexpected_list (o |- "[0, 0]" <= "Nat");
+  check_err "unexpected injection (left)" E.unexpected_injection (o |- "inl(true)" <= "Bool");
+  check_err "unexpected injection (right)" E.unexpected_injection (o |- "inr(0)" <= "Nat")
 
 let () =
   Alcotest.run "Typecheck"
