@@ -27,7 +27,7 @@ type tyError =
   | IllegalEmptyMatching of expr
   | NonexhaustiveMatchPatterns of expr * expr
   | UnexpectedPatternForType of pattern * typeT
-  | DuplicateRecordFields of string list * typeT * expr
+  | DuplicateRecordFields of string list * expr
   | DuplicateRecordTypeFields of string list * typeT
   | DuplicateVariantTypeFields of string list * typeT
 
@@ -178,7 +178,7 @@ let show_error (err : tyError) : string =
       ^ PrintStella.printTree (default_pad PrintStella.prtPattern) pat
       ^ "\n  не соответствует типу\n    "
       ^ PrintStella.printTree (default_pad PrintStella.prtTypeT) ty
-  | DuplicateRecordFields (dup, ty, expr) ->
+  | DuplicateRecordFields (dup, expr) ->
       "ERROR_DUPLICATE_RECORD_FIELDS\n  в выражении\n    "
       ^ PrintStella.printTree (default_pad PrintStella.prtExpr) expr
       ^ "\n  дублируются поля\n    " ^ String.concat "\n    " dup
@@ -708,7 +708,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       in
       let dupFields = findDupFields fields' [] in
       if List.compare_length_with dupFields 0 <> 0 then
-        raise (TyExn (DuplicateRecordFields (dupFields, ty, expr)))
+        raise (TyExn (DuplicateRecordFields (dupFields, expr)))
       else
         let fieldTypes' =
           List.map
@@ -939,11 +939,18 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       | _ -> raise (TyExn (NotATuple (ty, expr))))
   | Tuple exprs -> TypeTuple (List.map (infer ctx) exprs)
   | Record bindings ->
-      TypeRecord
-        (List.map
-           (fun (ABinding (ident, expr)) ->
-             ARecordFieldType (ident, infer ctx expr))
-           bindings)
+      let dup =
+        List.map (fun (ABinding (StellaIdent name, _)) -> name) bindings
+        |> find_dup
+      in
+      if List.compare_length_with dup 0 <> 0 then
+        raise (TyExn (DuplicateRecordFields (dup, expr)))
+      else
+        TypeRecord
+          (List.map
+             (fun (ABinding (ident, expr)) ->
+               ARecordFieldType (ident, infer ctx expr))
+             bindings)
   | ConsList (eHead, eTail) ->
       let ty = infer ctx eHead in
       typecheck ctx eTail (TypeList ty);
