@@ -7,7 +7,7 @@ let pp (s : 'a -> ShowStella.showable) (fmt : Format.formatter) (v : 'a) : unit
 let pp_expr = pp ShowStella.showExpr
 let pp_typeT = pp ShowStella.showTypeT
 let[@warning "-unused-value-declaration"] expr = Alcotest.testable pp_expr ( = )
-let typeT = Alcotest.testable pp_typeT ( = )
+let typeT = Alcotest.testable pp_typeT Typecheck.eq
 
 let parse_string_expr (s : string) =
   Lexing.from_string s |> ParStella.pExpr LexStella.token

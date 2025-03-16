@@ -200,6 +200,75 @@ let rec get (ctx : context) (s : string) : typeT option =
   | (s', ty) :: ctx' -> if s = s' then Some ty else get ctx' s
   | _ -> None
 
+let rec eq (ty1 : typeT) (ty2 : typeT) : bool =
+  match (ty1, ty2) with
+  | TypeFun (tyArgs1, tyRet1), TypeFun (tyArgs2, tyRet2) ->
+      List.compare_lengths tyArgs1 tyArgs2 = 0
+      && List.for_all2 eq tyArgs1 tyArgs2
+      && eq tyRet1 tyRet2
+  | TypeSum (ty11, ty12), TypeSum (ty21, ty22) -> eq ty11 ty21 && eq ty12 ty22
+  | TypeTuple tys1, TypeTuple tys2 ->
+      List.compare_lengths tys1 tys2 = 0 && List.for_all2 eq tys1 tys2
+  | TypeRecord fields1, TypeRecord fields2 ->
+      List.compare_lengths fields1 fields2 = 0
+      &&
+      let sorted_fields1 =
+        List.sort
+          (fun (ARecordFieldType (StellaIdent name1, _))
+               (ARecordFieldType (StellaIdent name2, _)) ->
+            String.compare name1 name2)
+          fields1
+      in
+      let sorted_fields2 =
+        List.sort
+          (fun (ARecordFieldType (StellaIdent name1, _))
+               (ARecordFieldType (StellaIdent name2, _)) ->
+            String.compare name1 name2)
+          fields2
+      in
+      List.for_all2
+        (fun (ARecordFieldType (StellaIdent name1, ty1))
+             (ARecordFieldType (StellaIdent name2, ty2)) ->
+          name1 = name2 && eq ty1 ty2)
+        sorted_fields1 sorted_fields2
+  | TypeVariant fields1, TypeVariant fields2 ->
+      List.compare_lengths fields1 fields2 = 0
+      &&
+      let sorted_fields1 =
+        List.sort
+          (fun (AVariantFieldType (StellaIdent name1, _))
+               (AVariantFieldType (StellaIdent name2, _)) ->
+            String.compare name1 name2)
+          fields1
+      in
+      let sorted_fields2 =
+        List.sort
+          (fun (AVariantFieldType (StellaIdent name1, _))
+               (AVariantFieldType (StellaIdent name2, _)) ->
+            String.compare name1 name2)
+          fields2
+      in
+      List.for_all2
+        (fun (AVariantFieldType (StellaIdent name1, typing1))
+             (AVariantFieldType (StellaIdent name2, typing2)) ->
+          name1 = name2
+          &&
+          match (typing1, typing2) with
+          | SomeTyping ty1, SomeTyping ty2 -> eq ty1 ty2
+          | NoTyping, NoTyping -> true
+          | _ -> false)
+        sorted_fields1 sorted_fields2
+  | TypeList ty1, TypeList ty2 -> eq ty1 ty2
+  | TypeBool, TypeBool -> true
+  | TypeNat, TypeNat -> true
+  | TypeUnit, TypeUnit -> true
+  (*
+  | TypeRef of typeT
+ *)
+  | _ -> false
+
+let neq (ty1 : typeT) (ty2 : typeT) : bool = eq ty1 ty2 |> not
+
 let check_main (ctx : context) : unit =
   match get ctx "main" with None -> raise (TyExn MissingMain) | _ -> ()
 
@@ -409,7 +478,7 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
   | PatternCastAs of pattern * typeT
   *)
   | PatternAsc (p', ty'), _ ->
-      if ty' <> ty then raise (TyExn (UnexpectedPatternForType (p, ty)))
+      if neq ty' ty then raise (TyExn (UnexpectedPatternForType (p, ty)))
       else deconstruct_pattern_binder p' ty
   | PatternVariant (StellaIdent name, patternData), TypeVariant fieldTypes -> (
       let rec find fieldTypes =
@@ -583,7 +652,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | NotEqual _, _ ->
       raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | TypeAsc (e1, ty'), _ ->
-      if ty <> ty' then
+      if neq ty ty' then
         raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else (
         check_type ty';
@@ -593,7 +662,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       (* List.compare_lengths tyParams params = 0 *)
       List.fold_left
         (fun _ (ty1, AParamDecl (ident, ty2)) ->
-          if ty1 <> ty2 then
+          if neq ty1 ty2 then
             raise
               (TyExn
                  (UnexpectedTypeForParameter (ty1, ty2, AParamDecl (ident, ty2))))
@@ -662,17 +731,17 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
   | Application _, _ ->
       let ty' = infer ctx expr in
-      if ty' <> ty then
+      if neq ty' ty then
         raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | DotRecord _, _ ->
       let ty' = infer ctx expr in
-      if ty' <> ty then
+      if neq ty' ty then
         raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | DotTuple _, _ ->
       let ty' = infer ctx expr in
-      if ty' <> ty then
+      if neq ty' ty then
         raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | Tuple exprs, TypeTuple tyExprs ->
@@ -688,7 +757,6 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
           (List.combine exprs tyExprs)
   | Tuple _, _ -> raise (TyExn (UnexpectedTuple (ty, expr)))
   | Record fields, TypeRecord fieldTypes ->
-      (* TODO check dup fields *)
       let fields' =
         List.map
           (fun (ABinding (StellaIdent name, expr')) -> (name, expr'))
@@ -750,17 +818,17 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
   | ConsList _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
   | Head _, _ ->
       let ty' = infer ctx expr in
-      if ty' <> ty then
+      if neq ty' ty then
         raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | Tail _, _ ->
       let ty' = infer ctx expr in
-      if ty' <> ty then
+      if neq ty' ty then
         raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | IsEmpty _, _ ->
       let ty' = infer ctx expr in
-      if ty' <> ty then
+      if neq ty' ty then
         raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
       else ()
   | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
@@ -779,7 +847,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
   | Fix _, _ ->
       let ty' = infer ctx expr in
-      if ty' <> ty then
+      if neq ty' ty then
         raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
   | NatRec (eN, eZ, eS), _ ->
       typecheck ctx eN TypeNat;
@@ -801,7 +869,7 @@ let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
       match get ctx name with
       | None -> raise (TyExn (UndefinedVariable (name, expr)))
       | Some ty' ->
-          if ty <> ty' then
+          if neq ty ty' then
             raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
           else ())
   | a, _ ->
@@ -989,7 +1057,7 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       let ty = infer ctx expr' in
       match ty with
       | TypeFun ([ tyArg ], tyRet) ->
-          if tyArg <> tyRet then
+          if neq tyArg tyRet then
             raise
               (TyExn
                  (UnexpectedTypeForExpression

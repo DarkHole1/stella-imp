@@ -64,8 +64,10 @@ let test_operations () =
   check "{ 0, true, unit }.2 <=> Bool" (o |- "{ 0, true, unit }.2" <=> "Bool");
 
   check "List::head ([0, 0]) <=> Nat" (o |- "List::head ([0, 0])" <=> "Nat");
-  check "List::tail ([true, false]) <=> [Bool]" (o |- "List::tail ([true, false])" <=> "[Bool]");
-  check "List::isempty ([unit]) <=> Bool" (o |- "List::isempty ([unit])" <=> "Bool");
+  check "List::tail ([true, false]) <=> [Bool]"
+    (o |- "List::tail ([true, false])" <=> "[Bool]");
+  check "List::isempty ([unit]) <=> Bool"
+    (o |- "List::isempty ([unit])" <=> "Bool");
 
   check "{ a = 0, b = unit, foo = true }.a <=> Nat"
     (o |- "{ a = 0, b = unit, foo = true }.a" <=> "Nat");
@@ -83,7 +85,10 @@ let test_operations () =
     (o |- "<| a = 0 |> as <| a : Nat, b : Bool |>" <=> "<| a : Nat, b : Bool |>");
   check "<| b = false |> as <| a : Nat, b : Bool |> <=> <| a : Nat, b : Bool |>"
     (o |- "<| b = false |> as <| a : Nat, b : Bool |>"
-   <=> "<| a : Nat, b : Bool |>")
+   <=> "<| a : Nat, b : Bool |>");
+  check "{ a = 0, b = true } as { b : Bool, a : Nat } <=> { a : Nat, b : Bool }"
+    (o |- "{ a = 0, b = true } as { b : Bool, a : Nat }"
+   <=> "{ a : Nat, b : Bool }")
 
 let test_functions () =
   check "fn (x : Nat) { return x } <=> fn (Nat) -> Nat"
@@ -104,55 +109,111 @@ let test_functions () =
 
 let test_basic_errors () =
   check_err "unexpected variable" E.undefined_variable (o |- "x" <=> "Bool");
-  check_err "not a function (call)" E.not_a_function (o |- "(true) ()" <=> "Bool");
+  check_err "not a function (call)" E.not_a_function
+    (o |- "(true) ()" <=> "Bool");
   check_err "not a function (fix)" E.not_a_function (o |- "fix(0)" <=> "Nat");
   check_err "not a tuple" E.not_a_tuple (o |- "unit . 1" <=> "Unit");
   check_err "not a record" E.not_a_record (o |- "0 . a" <=> "Nat");
   check_err "not a list (head)" E.not_a_list (o |- "List::head (0)" <=> "Nat");
-  check_err "not a list (tail)" E.not_a_list (o |- "List::tail (unit)" <=> "[Unit]");
-  check_err "not a list (isempty)" E.not_a_list (o |- "List::isempty (true)" <=> "Bool");
-  check_err "unexpected lambda" E.unexpected_lambda (o |- "fn (a : Nat) { return b }" <= "Unit");
-  check_err "unexpected type for parameter" E.unexpected_type_for_parameter (o |- "fn (a : Unit) { return b }" <= "fn (Nat) -> Nat");
+  check_err "not a list (tail)" E.not_a_list
+    (o |- "List::tail (unit)" <=> "[Unit]");
+  check_err "not a list (isempty)" E.not_a_list
+    (o |- "List::isempty (true)" <=> "Bool");
+  check_err "unexpected lambda" E.unexpected_lambda
+    (o |- "fn (a : Nat) { return b }" <= "Unit");
+  check_err "unexpected type for parameter" E.unexpected_type_for_parameter
+    (o |- "fn (a : Unit) { return b }" <= "fn (Nat) -> Nat");
   check_err "unexpected tuple" E.unexpected_tuple (o |- "{0, 0, 0}" <= "Nat");
-  check_err "unexpected record" E.unexpected_record (o |- "{ foo = 0, bar = false }" <= "Bool");
-  check_err "unexpected variant" E.unexpected_variant (o |- "<| abryvalg = unit |>" <= "Unit");
+  check_err "unexpected record" E.unexpected_record
+    (o |- "{ foo = 0, bar = false }" <= "Bool");
+  check_err "unexpected variant" E.unexpected_variant
+    (o |- "<| abryvalg = unit |>" <= "Unit");
   check_err "unexpected list" E.unexpected_list (o |- "[0, 0]" <= "Nat");
-  check_err "unexpected injection (left)" E.unexpected_injection (o |- "inl(true)" <= "Bool");
-  check_err "unexpected injection (right)" E.unexpected_injection (o |- "inr(0)" <= "Nat");
-  check_err "missing record fields 1" E.missing_record_fields (o |- "{bar = unit}" <= "{ foo : Nat, bar : Unit }");
-  check_err "missing record fields 2" E.missing_record_fields (o |- "{foo = 0}" <= "{ foo : Nat, bar : Unit }");
-  check_err "unexpected record fields 1" E.unexpected_record_fields (o |- "{foo = 0, baz = unit}" <= "{ foo : Nat }");
-  check_err "unexpected record fields 2" E.unexpected_record_fields (o |- "{foo = 0, baz = unit}" <= "{ baz : Unit }");
-  check_err "unexpected field access" E.unexpected_field_access (o |- "{foo = true}.fo" <=> "Bool");
-  check_err "unexpected variant label" E.unexpected_variant_label (o |- "<| foo = 0 |>" <= "<| fooo : Nat |>");
-  check_err "ambiguous sum type (left)" E.ambiguous_sum_type (o |- "inl(true)" => "Bool + Unit");
-  check_err "ambiguous sum type (right)" E.ambiguous_sum_type (o |- "inr(unit)" => "Bool + Unit");
-  check_err "ambiguous variant type" E.ambiguous_variant_type (o |- "<| success = true |>" => "<| success : Bool |>");
+  check_err "unexpected injection (left)" E.unexpected_injection
+    (o |- "inl(true)" <= "Bool");
+  check_err "unexpected injection (right)" E.unexpected_injection
+    (o |- "inr(0)" <= "Nat");
+  check_err "missing record fields 1" E.missing_record_fields
+    (o |- "{bar = unit}" <= "{ foo : Nat, bar : Unit }");
+  check_err "missing record fields 2" E.missing_record_fields
+    (o |- "{foo = 0}" <= "{ foo : Nat, bar : Unit }");
+  check_err "unexpected record fields 1" E.unexpected_record_fields
+    (o |- "{foo = 0, baz = unit}" <= "{ foo : Nat }");
+  check_err "unexpected record fields 2" E.unexpected_record_fields
+    (o |- "{foo = 0, baz = unit}" <= "{ baz : Unit }");
+  check_err "unexpected field access" E.unexpected_field_access
+    (o |- "{foo = true}.fo" <=> "Bool");
+  check_err "unexpected variant label" E.unexpected_variant_label
+    (o |- "<| foo = 0 |>" <= "<| fooo : Nat |>");
+  check_err "ambiguous sum type (left)" E.ambiguous_sum_type
+    (o |- "inl(true)" => "Bool + Unit");
+  check_err "ambiguous sum type (right)" E.ambiguous_sum_type
+    (o |- "inr(unit)" => "Bool + Unit");
+  check_err "ambiguous variant type" E.ambiguous_variant_type
+    (o |- "<| success = true |>" => "<| success : Bool |>");
   check_err "ambiguous list" E.ambiguous_list (o |- "[]" => "[Unit]");
   (* Empty and non-exhaustive matching and unexpected patter will be in match tests *)
-  check_err "duplicate record fields" E.duplicate_record_fields (o |- "{ foo = 0, bar = unit, foo = 0 }" <=> "{ foo : Nat, bar : Unit }");
+  check_err "duplicate record fields" E.duplicate_record_fields
+    (o |- "{ foo = 0, bar = unit, foo = 0 }" <=> "{ foo : Nat, bar : Unit }");
   (* Can't check types directly, instead checking them in all introducing types contextes *)
-  check_err "duplicate record type fields 1" E.duplicate_record_type_fields (o |- "fn (x : { foo : Nat, foo : Nat }) { return x.foo }" => "fn ({ foo : Nat }) -> Nat");
-  check_err "duplicate record type fields 2" E.duplicate_record_type_fields (o |- "{ foo = 0 } as { foo : Nat, foo : Nat }" => "{ foo : Nat }");
-  check_err "duplicate record type fields 3" E.duplicate_record_type_fields (o |- "fn (x : [{ foo : Nat, foo : Nat }]) { return List::head(x).foo }" => "fn ([{ foo : Nat }]) -> Nat");
-  check_err "duplicate record type fields 4" E.duplicate_record_type_fields (o |- "[{ foo = 0 }] as [{ foo : Nat, foo : Nat }]" => "[{ foo : Nat }]");
-  check_err "duplicate record type fields 5" E.duplicate_record_type_fields (o |- "fn (x : <| bazz : { foo : Nat, foo : Nat } |>) { return x }" => "fn (<| bazz : { foo : Nat } |>) -> <| bazz : { foo : Nat } |>");
-  check_err "duplicate record type fields 6" E.duplicate_record_type_fields (o |- "<| bazz = { foo = 0 } |> as <| bazz : { foo : Nat, foo : Nat } |>" => "<| bazz : { foo : Nat } |>");
-  check_err "duplicate record type fields 7" E.duplicate_record_type_fields (o |- "fn (x : {Bool, { foo : Nat, foo : Nat }}) { return x.2.foo }" => "fn ({Bool, { foo : Nat }}) -> Nat");
-  check_err "duplicate record type fields 8" E.duplicate_record_type_fields (o |- "{true, { foo = 0 }} as {Bool, { foo : Nat, foo : Nat }}" => "{Bool, { foo : Nat }}");
-  check_err "duplicate record type fields 9" E.duplicate_record_type_fields (o |- "fn (x : Bool + { foo : Nat, foo : Nat }) { return 0 }" => "fn ({ foo : Nat }) -> Nat");
-  check_err "duplicate record type fields 10" E.duplicate_record_type_fields (o |- "inl(true) as (Bool + { foo : Nat, foo : Nat })" => "Bool + { foo : Nat }");
+  check_err "duplicate record type fields 1" E.duplicate_record_type_fields
+    (o |- "fn (x : { foo : Nat, foo : Nat }) { return x.foo }"
+   => "fn ({ foo : Nat }) -> Nat");
+  check_err "duplicate record type fields 2" E.duplicate_record_type_fields
+    (o |- "{ foo = 0 } as { foo : Nat, foo : Nat }" => "{ foo : Nat }");
+  check_err "duplicate record type fields 3" E.duplicate_record_type_fields
+    (o |- "fn (x : [{ foo : Nat, foo : Nat }]) { return List::head(x).foo }"
+   => "fn ([{ foo : Nat }]) -> Nat");
+  check_err "duplicate record type fields 4" E.duplicate_record_type_fields
+    (o |- "[{ foo = 0 }] as [{ foo : Nat, foo : Nat }]" => "[{ foo : Nat }]");
+  check_err "duplicate record type fields 5" E.duplicate_record_type_fields
+    (o |- "fn (x : <| bazz : { foo : Nat, foo : Nat } |>) { return x }"
+   => "fn (<| bazz : { foo : Nat } |>) -> <| bazz : { foo : Nat } |>");
+  check_err "duplicate record type fields 6" E.duplicate_record_type_fields
+    (o |- "<| bazz = { foo = 0 } |> as <| bazz : { foo : Nat, foo : Nat } |>"
+   => "<| bazz : { foo : Nat } |>");
+  check_err "duplicate record type fields 7" E.duplicate_record_type_fields
+    (o |- "fn (x : {Bool, { foo : Nat, foo : Nat }}) { return x.2.foo }"
+   => "fn ({Bool, { foo : Nat }}) -> Nat");
+  check_err "duplicate record type fields 8" E.duplicate_record_type_fields
+    (o |- "{true, { foo = 0 }} as {Bool, { foo : Nat, foo : Nat }}"
+   => "{Bool, { foo : Nat }}");
+  check_err "duplicate record type fields 9" E.duplicate_record_type_fields
+    (o |- "fn (x : Bool + { foo : Nat, foo : Nat }) { return 0 }"
+   => "fn ({ foo : Nat }) -> Nat");
+  check_err "duplicate record type fields 10" E.duplicate_record_type_fields
+    (o |- "inl(true) as (Bool + { foo : Nat, foo : Nat })"
+   => "Bool + { foo : Nat }");
 
-  check_err "duplicate variant type fields 1" E.duplicate_variant_type_fields (o |- "fn (x : <| foo : Nat, foo : Nat |>) { return 0 }" => "fn (<| foo : Nat |>) -> Nat");
-  check_err "duplicate variant type fields 2" E.duplicate_variant_type_fields (o |- "<| foo = 0 |> as <| foo : Nat, foo : Nat |>" => "<| foo : Nat |>");
-  check_err "duplicate variant type fields 3" E.duplicate_variant_type_fields (o |- "fn (x : [<| foo : Nat, foo : Nat |>]) { return 0 }" => "fn ([<| foo : Nat |>]) -> Nat");
-  check_err "duplicate variant type fields 4" E.duplicate_variant_type_fields (o |- "[<| foo = 0 |>] as [<| foo : Nat, foo : Nat |>]" => "[<| foo : Nat |>]");
-  check_err "duplicate variant type fields 5" E.duplicate_variant_type_fields (o |- "fn (x : { bazz : <| foo : Nat, foo : Nat |> }) { return 0 }" => "fn ({ bazz : <| foo : Nat |> }) -> Nat");
-  check_err "duplicate variant type fields 6" E.duplicate_variant_type_fields (o |- "{ bazz = <| foo = 0 |> } as { bazz : <| foo : Nat, foo : Nat |> }" => "{ bazz : <| foo : Nat |> }");
-  check_err "duplicate variant type fields 7" E.duplicate_variant_type_fields (o |- "fn (x : {Bool, <| foo : Nat, foo : Nat |>}) { return 0 }" => "fn ({Bool, <| foo : Nat |>}) -> Nat");
-  check_err "duplicate variant type fields 8" E.duplicate_variant_type_fields (o |- "{true, <| foo = 0 |>} as {Bool, <| foo : Nat, foo : Nat |>}" => "{Bool, <| foo : Nat |>}");
-  check_err "duplicate variant type fields 9" E.duplicate_variant_type_fields (o |- "fn (x : Bool + <| foo : Nat, foo : Nat |>) { return 0 }" => "fn (Bool + <| foo : Nat |>) -> Nat");
-  check_err "duplicate variant type fields 10" E.duplicate_variant_type_fields (o |- "inl(true) as (Bool + <| foo : Nat, foo : Nat |>)" => "Bool + <| foo : Nat |>")
+  check_err "duplicate variant type fields 1" E.duplicate_variant_type_fields
+    (o |- "fn (x : <| foo : Nat, foo : Nat |>) { return 0 }"
+   => "fn (<| foo : Nat |>) -> Nat");
+  check_err "duplicate variant type fields 2" E.duplicate_variant_type_fields
+    (o |- "<| foo = 0 |> as <| foo : Nat, foo : Nat |>" => "<| foo : Nat |>");
+  check_err "duplicate variant type fields 3" E.duplicate_variant_type_fields
+    (o |- "fn (x : [<| foo : Nat, foo : Nat |>]) { return 0 }"
+   => "fn ([<| foo : Nat |>]) -> Nat");
+  check_err "duplicate variant type fields 4" E.duplicate_variant_type_fields
+    (o |- "[<| foo = 0 |>] as [<| foo : Nat, foo : Nat |>]"
+   => "[<| foo : Nat |>]");
+  check_err "duplicate variant type fields 5" E.duplicate_variant_type_fields
+    (o |- "fn (x : { bazz : <| foo : Nat, foo : Nat |> }) { return 0 }"
+   => "fn ({ bazz : <| foo : Nat |> }) -> Nat");
+  check_err "duplicate variant type fields 6" E.duplicate_variant_type_fields
+    (o |- "{ bazz = <| foo = 0 |> } as { bazz : <| foo : Nat, foo : Nat |> }"
+   => "{ bazz : <| foo : Nat |> }");
+  check_err "duplicate variant type fields 7" E.duplicate_variant_type_fields
+    (o |- "fn (x : {Bool, <| foo : Nat, foo : Nat |>}) { return 0 }"
+   => "fn ({Bool, <| foo : Nat |>}) -> Nat");
+  check_err "duplicate variant type fields 8" E.duplicate_variant_type_fields
+    (o |- "{true, <| foo = 0 |>} as {Bool, <| foo : Nat, foo : Nat |>}"
+   => "{Bool, <| foo : Nat |>}");
+  check_err "duplicate variant type fields 9" E.duplicate_variant_type_fields
+    (o |- "fn (x : Bool + <| foo : Nat, foo : Nat |>) { return 0 }"
+   => "fn (Bool + <| foo : Nat |>) -> Nat");
+  check_err "duplicate variant type fields 10" E.duplicate_variant_type_fields
+    (o |- "inl(true) as (Bool + <| foo : Nat, foo : Nat |>)"
+   => "Bool + <| foo : Nat |>")
 
 let () =
   Alcotest.run "Typecheck"
