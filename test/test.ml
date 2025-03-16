@@ -130,8 +130,29 @@ let test_basic_errors () =
   check_err "ambiguous variant type" E.ambiguous_variant_type (o |- "<| success = true |>" => "<| success : Bool |>");
   check_err "ambiguous list" E.ambiguous_list (o |- "[]" => "[Unit]");
   (* Empty and non-exhaustive matching and unexpected patter will be in match tests *)
-  check_err "duplicate record fields" E.duplicate_record_fields (o |- "{ foo = 0, bar = unit, foo = 0 }" <=> "{ foo : Nat, bar : Unit }")
-  (* check_err "duplicate record type fields" E.duplicate_record_fields (o |- "{ foo = 0, bar = unit, foo = 0 }" <=> "{ foo : Nat, bar : Unit }"); *)
+  check_err "duplicate record fields" E.duplicate_record_fields (o |- "{ foo = 0, bar = unit, foo = 0 }" <=> "{ foo : Nat, bar : Unit }");
+  (* Can't check types directly, instead checking them in all introducing types contextes *)
+  check_err "duplicate record type fields 1" E.duplicate_record_type_fields (o |- "fn (x : { foo : Nat, foo : Nat }) { return x.foo }" <=> "fn ({ foo : Nat }) -> Nat");
+  check_err "duplicate record type fields 2" E.duplicate_record_type_fields (o |- "{ foo = 0 } as { foo : Nat, foo : Nat }" <=> "{ foo : Nat }");
+  check_err "duplicate record type fields 3" E.duplicate_record_type_fields (o |- "fn (x : [{ foo : Nat, foo : Nat }]) { return List::head(x).foo }" <=> "fn ([{ foo : Nat }]) -> Nat");
+  check_err "duplicate record type fields 4" E.duplicate_record_type_fields (o |- "[{ foo = 0 }] as [{ foo : Nat, foo : Nat }]" <=> "[{ foo : Nat }]");
+  check_err "duplicate record type fields 5" E.duplicate_record_type_fields (o |- "fn (x : <| bazz : { foo : Nat, foo : Nat } |>) { return x }" <=> "fn (<| bazz : { foo : Nat } |>) -> <| bazz : { foo : Nat } |>");
+  check_err "duplicate record type fields 6" E.duplicate_record_type_fields (o |- "<| bazz = { foo = 0 } |> as <| bazz : { foo : Nat, foo : Nat } |>" <=> "<| bazz : { foo : Nat } |>");
+  check_err "duplicate record type fields 7" E.duplicate_record_type_fields (o |- "fn (x : {Bool, { foo : Nat, foo : Nat }}) { return x.2.foo }" <=> "fn ({Bool, { foo : Nat }}) -> Nat");
+  check_err "duplicate record type fields 8" E.duplicate_record_type_fields (o |- "{true, { foo = 0 }} as {Bool, { foo : Nat, foo : Nat }}" <=> "{Bool, { foo : Nat }}");
+  check_err "duplicate record type fields 9" E.duplicate_record_type_fields (o |- "fn (x : Bool + { foo : Nat, foo : Nat }) { return 0 }" <=> "fn ({ foo : Nat }) -> Nat");
+  check_err "duplicate record type fields 10" E.duplicate_record_type_fields (o |- "inl(true) as Bool + { foo : Nat, foo : Nat }" <=> "Bool + { foo : Nat }");
+
+  check_err "duplicate variant type fields 1" E.duplicate_variant_type_fields (o |- "fn (x : <| foo : Nat, foo : Nat |>) { return 0 }" <=> "fn (<| foo : Nat |>) -> Nat");
+  check_err "duplicate variant type fields 2" E.duplicate_variant_type_fields (o |- "<| foo = 0 |> as <| foo : Nat, foo : Nat |>" <=> "<| foo : Nat |>");
+  check_err "duplicate variant type fields 3" E.duplicate_variant_type_fields (o |- "fn (x : [<| foo : Nat, foo : Nat |>]) { return 0 }" <=> "fn ([<| foo : Nat |>]) -> Nat");
+  check_err "duplicate variant type fields 4" E.duplicate_variant_type_fields (o |- "[<| foo = 0 |>] as [<| foo : Nat, foo : Nat |>]" <=> "[<| foo : Nat |>]");
+  check_err "duplicate variant type fields 5" E.duplicate_variant_type_fields (o |- "fn (x : { bazz : <| foo : Nat, foo : Nat |> }) { return 0 }" <=> "fn ({ bazz : <| foo : Nat |> }) -> Nat");
+  check_err "duplicate variant type fields 6" E.duplicate_variant_type_fields (o |- "{ bazz = <| foo = 0 |> } as { bazz : <| foo : Nat, foo : Nat |> }" <=> "{ bazz : <| foo : Nat, foo : Nat |> }");
+  check_err "duplicate variant type fields 7" E.duplicate_variant_type_fields (o |- "fn (x : {Bool, <| foo : Nat, foo : Nat |>}) { return 0 }" <=> "fn ({Bool, <| foo : Nat |>}) -> Nat");
+  check_err "duplicate variant type fields 8" E.duplicate_variant_type_fields (o |- "{true, <| foo = 0 |>} as {Bool, <| foo : Nat, foo : Nat |>}" <=> "{Bool, <| foo : Nat, foo : Nat |>}");
+  check_err "duplicate variant type fields 9" E.duplicate_variant_type_fields (o |- "fn (x : Bool + { foo : Nat, foo : Nat }) { return 0 }" <=> "fn (Bool + { foo : Nat, foo : Nat }) -> Nat");
+  check_err "duplicate variant type fields 10" E.duplicate_variant_type_fields (o |- "inl(true) as Bool + <| foo : Nat, foo : Nat |>" <=> "Bool + <| foo : Nat |>")
 
 let () =
   Alcotest.run "Typecheck"
