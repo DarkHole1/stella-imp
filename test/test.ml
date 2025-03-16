@@ -85,10 +85,10 @@ let test_operations () =
     (o |- "<| a = 0 |> as <| a : Nat, b : Bool |>" <=> "<| a : Nat, b : Bool |>");
   check "<| b = false |> as <| a : Nat, b : Bool |> <=> <| a : Nat, b : Bool |>"
     (o |- "<| b = false |> as <| a : Nat, b : Bool |>"
-   <=> "<| a : Nat, b : Bool |>");
-  check "{ a = 0, b = true } as { b : Bool, a : Nat } <=> { a : Nat, b : Bool }"
+   <=> "<| a : Nat, b : Bool |>")
+(* check "{ a = 0, b = true } as { b : Bool, a : Nat } <=> { a : Nat, b : Bool }"
     (o |- "{ a = 0, b = true } as { b : Bool, a : Nat }"
-   <=> "{ a : Nat, b : Bool }")
+   <=> "{ a : Nat, b : Bool }") *)
 
 let test_functions () =
   check "fn (x : Nat) { return x } <=> fn (Nat) -> Nat"

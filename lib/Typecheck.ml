@@ -211,53 +211,23 @@ let rec eq (ty1 : typeT) (ty2 : typeT) : bool =
       List.compare_lengths tys1 tys2 = 0 && List.for_all2 eq tys1 tys2
   | TypeRecord fields1, TypeRecord fields2 ->
       List.compare_lengths fields1 fields2 = 0
-      &&
-      let sorted_fields1 =
-        List.sort
-          (fun (ARecordFieldType (StellaIdent name1, _))
-               (ARecordFieldType (StellaIdent name2, _)) ->
-            String.compare name1 name2)
-          fields1
-      in
-      let sorted_fields2 =
-        List.sort
-          (fun (ARecordFieldType (StellaIdent name1, _))
-               (ARecordFieldType (StellaIdent name2, _)) ->
-            String.compare name1 name2)
-          fields2
-      in
-      List.for_all2
-        (fun (ARecordFieldType (StellaIdent name1, ty1))
-             (ARecordFieldType (StellaIdent name2, ty2)) ->
-          name1 = name2 && eq ty1 ty2)
-        sorted_fields1 sorted_fields2
+      && List.for_all2
+           (fun (ARecordFieldType (StellaIdent name1, ty1))
+                (ARecordFieldType (StellaIdent name2, ty2)) ->
+             name1 = name2 && eq ty1 ty2)
+           fields1 fields2
   | TypeVariant fields1, TypeVariant fields2 ->
       List.compare_lengths fields1 fields2 = 0
-      &&
-      let sorted_fields1 =
-        List.sort
-          (fun (AVariantFieldType (StellaIdent name1, _))
-               (AVariantFieldType (StellaIdent name2, _)) ->
-            String.compare name1 name2)
-          fields1
-      in
-      let sorted_fields2 =
-        List.sort
-          (fun (AVariantFieldType (StellaIdent name1, _))
-               (AVariantFieldType (StellaIdent name2, _)) ->
-            String.compare name1 name2)
-          fields2
-      in
-      List.for_all2
-        (fun (AVariantFieldType (StellaIdent name1, typing1))
-             (AVariantFieldType (StellaIdent name2, typing2)) ->
-          name1 = name2
-          &&
-          match (typing1, typing2) with
-          | SomeTyping ty1, SomeTyping ty2 -> eq ty1 ty2
-          | NoTyping, NoTyping -> true
-          | _ -> false)
-        sorted_fields1 sorted_fields2
+      && List.for_all2
+           (fun (AVariantFieldType (StellaIdent name1, typing1))
+                (AVariantFieldType (StellaIdent name2, typing2)) ->
+             name1 = name2
+             &&
+             match (typing1, typing2) with
+             | SomeTyping ty1, SomeTyping ty2 -> eq ty1 ty2
+             | NoTyping, NoTyping -> true
+             | _ -> false)
+           fields1 fields2
   | TypeList ty1, TypeList ty2 -> eq ty1 ty2
   | TypeBool, TypeBool -> true
   | TypeNat, TypeNat -> true
