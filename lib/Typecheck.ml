@@ -854,6 +854,7 @@ and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
       typecheck ctx e2 TypeNat;
       TypeBool
   | TypeAsc (expr', ty) ->
+      check_type ty;
       typecheck ctx expr' ty;
       ty
   | Abstraction (params, expr') ->
