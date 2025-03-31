@@ -15,11 +15,15 @@ let parse_string_expr (s : string) =
 let parse_string_typeT (s : string) =
   Lexing.from_string s |> ParStella.pTypeT LexStella.token
 
+module EmptyTypecheck = Typecheck.Typecheck (struct
+  let ambiguous e = raise e
+end)
+
 let typecheck (ctx : Typecheck.context) (expr : string) (ty : string) =
   let ctx' = ctx in
   let expr' = parse_string_expr expr in
   let ty' = parse_string_typeT ty in
-  Typecheck.typecheck ctx' expr' ty'
+  EmptyTypecheck.typecheck ctx' expr' ty'
 
 let typecheck' = typecheck []
 let check_typecheck (_ : string) = typecheck
@@ -28,7 +32,7 @@ let check_typecheck' (_ : string) = typecheck'
 let infer (ctx : Typecheck.context) (expr : string) =
   let ctx' = ctx in
   let expr' = parse_string_expr expr in
-  Typecheck.infer ctx' expr'
+  EmptyTypecheck.infer ctx' expr'
 
 let infer' = infer []
 

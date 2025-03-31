@@ -524,494 +524,532 @@ let put_params (ctx : context) (params : paramDecl list) : context =
       ctx;
     ]
 
-let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
-  (* print_endline
+module type Context = sig
+  val ambiguous : exn -> typeT
+end
+
+module Typecheck (Ctx : Context) = struct
+  let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
+    (* print_endline
     ("Checking expr "
     ^ PrintStella.printTree PrintStella.prtExpr expr
     ^ " with type "
     ^ PrintStella.printTree PrintStella.prtTypeT ty); *)
-  match (expr, ty) with
-  | Sequence (e1, e2), _ ->
-      typecheck ctx e1 TypeUnit;
-      typecheck ctx e2 ty
-  | If (eIf, eThen, eElse), _ ->
-      typecheck ctx eIf TypeBool;
-      typecheck ctx eThen ty;
-      typecheck ctx eElse ty
-  | Let (binders, expr'), _ ->
-      (* TODO: check semantics *)
-      let bindersCtx =
-        List.concat_map
-          (fun (APatternBinding (p, expr'')) ->
-            deconstruct_pattern_binder p (infer ctx expr''))
-          binders
-      in
-      let ctx' = List.concat [ bindersCtx; ctx ] in
-      typecheck ctx' expr' ty
-  (* LetRec TODO *)
-  | LessThan (e1, e2), TypeBool ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | LessThan (e1, e2), _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | LessThanOrEqual (e1, e2), TypeBool ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | LessThanOrEqual (e1, e2), _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | GreaterThan (e1, e2), TypeBool ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | GreaterThan (e1, e2), _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | GreaterThanOrEqual (e1, e2), TypeBool ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | GreaterThanOrEqual (e1, e2), _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | Equal (e1, e2), TypeBool ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | Equal _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | NotEqual (e1, e2), TypeBool ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | NotEqual _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | TypeAsc (e1, ty'), _ ->
-      if neq ty ty' then
-        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
-      else (
-        check_type ty';
-        typecheck ctx e1 ty')
-  | Abstraction (params, expr'), TypeFun (tyParams, tyReturn) ->
-      (* Check arity *)
-      (* List.compare_lengths tyParams params = 0 *)
-      List.fold_left
-        (fun _ (ty1, AParamDecl (ident, ty2)) ->
-          if neq ty1 ty2 then
-            raise
-              (TyExn
-                 (UnexpectedTypeForParameter (ty1, ty2, AParamDecl (ident, ty2))))
-          else ())
-        ()
-        (List.combine tyParams params);
-      let ctx' = put_params ctx params in
-      check_type tyReturn;
-      typecheck ctx' expr' tyReturn
-  | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
-  | Variant (StellaIdent name, SomeExprData expr'), TypeVariant fieldTypes ->
-      (* TODO: No expr data *)
-      let rec find (fieldTypes : variantFieldType list) =
-        match fieldTypes with
-        | AVariantFieldType (StellaIdent name', SomeTyping ty') :: fieldTypes'
-          ->
-            if name = name' then ty' else find fieldTypes'
-        | _ -> raise (TyExn (UnexpectedVariantLabel (ty, name, expr)))
-      in
-      let ty' = find fieldTypes in
-      typecheck ctx expr' ty'
-  | Variant _, _ -> raise (TyExn (UnexpectedVariant (ty, expr)))
-  | Match (_, []), _ -> raise (TyExn (IllegalEmptyMatching expr))
-  | Match (expr', cases), _ -> (
-      let ty' = infer ctx expr' in
-      List.iter
-        (fun (AMatchCase (pat, expr'')) ->
-          let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
-          typecheck ctx' expr'' ty)
-        cases;
-      let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
-      match check_exhaustivness ps ty' with
-      | Some expr'' -> raise (TyExn (NonexhaustiveMatchPatterns (expr'', expr)))
-      | None -> ())
-  | List exprs, TypeList ty' ->
-      List.iter (fun expr' -> typecheck ctx expr' ty') exprs
-  | List _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
-  | Add (e1, e2), TypeNat ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | Add _, _ -> raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
-  | Subtract (e1, e2), TypeNat ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | Subtract _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
-  | LogicOr (e1, e2), TypeBool ->
-      typecheck ctx e1 TypeBool;
-      typecheck ctx e2 TypeBool
-  | LogicOr _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | Multiply (e1, e2), TypeNat ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | Multiply _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
-  | Divide (e1, e2), TypeNat ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat
-  | Divide _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
-  | LogicAnd (e1, e2), TypeBool ->
-      typecheck ctx e1 TypeBool;
-      typecheck ctx e2 TypeBool
-  | LogicAnd _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | Application _, _ ->
-      let ty' = infer ctx expr in
-      if neq ty' ty then
-        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
-      else ()
-  | DotRecord _, _ ->
-      let ty' = infer ctx expr in
-      if neq ty' ty then
-        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
-      else ()
-  | DotTuple _, _ ->
-      let ty' = infer ctx expr in
-      if neq ty' ty then
-        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
-      else ()
-  | Tuple exprs, TypeTuple tyExprs ->
-      if List.compare_lengths exprs tyExprs <> 0 then
-        raise
-          (TyExn
-             (UnexpectedTupleLength
-                (List.length tyExprs, List.length exprs, expr)))
-      else
+    match (expr, ty) with
+    | Sequence (e1, e2), _ ->
+        typecheck ctx e1 TypeUnit;
+        typecheck ctx e2 ty
+    | If (eIf, eThen, eElse), _ ->
+        typecheck ctx eIf TypeBool;
+        typecheck ctx eThen ty;
+        typecheck ctx eElse ty
+    | Let (binders, expr'), _ ->
+        (* TODO: check semantics *)
+        let bindersCtx =
+          List.concat_map
+            (fun (APatternBinding (p, expr'')) ->
+              deconstruct_pattern_binder p (infer ctx expr''))
+            binders
+        in
+        let ctx' = List.concat [ bindersCtx; ctx ] in
+        typecheck ctx' expr' ty
+    (* LetRec TODO *)
+    | LessThan (e1, e2), TypeBool ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | LessThan (e1, e2), _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | LessThanOrEqual (e1, e2), TypeBool ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | LessThanOrEqual (e1, e2), _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | GreaterThan (e1, e2), TypeBool ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | GreaterThan (e1, e2), _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | GreaterThanOrEqual (e1, e2), TypeBool ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | GreaterThanOrEqual (e1, e2), _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | Equal (e1, e2), TypeBool ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | Equal _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | NotEqual (e1, e2), TypeBool ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | NotEqual _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | TypeAsc (e1, ty'), _ ->
+        if neq ty ty' then
+          raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+        else (
+          check_type ty';
+          typecheck ctx e1 ty')
+    | Abstraction (params, expr'), TypeFun (tyParams, tyReturn) ->
+        (* Check arity *)
+        (* List.compare_lengths tyParams params = 0 *)
         List.fold_left
-          (fun _ (expr, ty) -> typecheck ctx expr ty)
+          (fun _ (ty1, AParamDecl (ident, ty2)) ->
+            if neq ty1 ty2 then
+              raise
+                (TyExn
+                   (UnexpectedTypeForParameter
+                      (ty1, ty2, AParamDecl (ident, ty2))))
+            else ())
           ()
-          (List.combine exprs tyExprs)
-  | Tuple _, _ -> raise (TyExn (UnexpectedTuple (ty, expr)))
-  | Record fields, TypeRecord fieldTypes ->
-      let fields' =
-        List.map
-          (fun (ABinding (StellaIdent name, expr')) -> (name, expr'))
-          fields
-      in
-      let rec findDupFields (fields : (string * _) list)
-          (dupFields : string list) =
-        match fields with
-        | (name, _) :: fields' ->
-            let dupFields' =
-              if List.mem_assoc name fields' && not (List.mem name dupFields)
-              then name :: dupFields
-              else dupFields
+          (List.combine tyParams params);
+        let ctx' = put_params ctx params in
+        check_type tyReturn;
+        typecheck ctx' expr' tyReturn
+    | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
+    | Variant (StellaIdent name, SomeExprData expr'), TypeVariant fieldTypes ->
+        (* TODO: No expr data *)
+        let rec find (fieldTypes : variantFieldType list) =
+          match fieldTypes with
+          | AVariantFieldType (StellaIdent name', SomeTyping ty') :: fieldTypes'
+            ->
+              if name = name' then ty' else find fieldTypes'
+          | _ -> raise (TyExn (UnexpectedVariantLabel (ty, name, expr)))
+        in
+        let ty' = find fieldTypes in
+        typecheck ctx expr' ty'
+    | Variant _, _ -> raise (TyExn (UnexpectedVariant (ty, expr)))
+    | Match (_, []), _ -> raise (TyExn (IllegalEmptyMatching expr))
+    | Match (expr', cases), _ -> (
+        let ty' = infer ctx expr' in
+        List.iter
+          (fun (AMatchCase (pat, expr'')) ->
+            let ctx' =
+              List.concat [ deconstruct_pattern_binder pat ty'; ctx ]
             in
-            findDupFields fields' dupFields'
-        | _ -> dupFields
-      in
-      let dupFields = findDupFields fields' [] in
-      if List.compare_length_with dupFields 0 <> 0 then
-        raise (TyExn (DuplicateRecordFields (dupFields, expr)))
-      else
-        let fieldTypes' =
+            typecheck ctx' expr'' ty)
+          cases;
+        let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
+        match check_exhaustivness ps ty' with
+        | Some expr'' ->
+            raise (TyExn (NonexhaustiveMatchPatterns (expr'', expr)))
+        | None -> ())
+    | List exprs, TypeList ty' ->
+        List.iter (fun expr' -> typecheck ctx expr' ty') exprs
+    | List _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
+    | Add (e1, e2), TypeNat ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | Add _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+    | Subtract (e1, e2), TypeNat ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | Subtract _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+    | LogicOr (e1, e2), TypeBool ->
+        typecheck ctx e1 TypeBool;
+        typecheck ctx e2 TypeBool
+    | LogicOr _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | Multiply (e1, e2), TypeNat ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | Multiply _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+    | Divide (e1, e2), TypeNat ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat
+    | Divide _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+    | LogicAnd (e1, e2), TypeBool ->
+        typecheck ctx e1 TypeBool;
+        typecheck ctx e2 TypeBool
+    | LogicAnd _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | Application _, _ ->
+        let ty' = infer ctx expr in
+        if neq ty' ty then
+          raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+        else ()
+    | DotRecord _, _ ->
+        let ty' = infer ctx expr in
+        if neq ty' ty then
+          raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+        else ()
+    | DotTuple _, _ ->
+        let ty' = infer ctx expr in
+        if neq ty' ty then
+          raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+        else ()
+    | Tuple exprs, TypeTuple tyExprs ->
+        if List.compare_lengths exprs tyExprs <> 0 then
+          raise
+            (TyExn
+               (UnexpectedTupleLength
+                  (List.length tyExprs, List.length exprs, expr)))
+        else
+          List.fold_left
+            (fun _ (expr, ty) -> typecheck ctx expr ty)
+            ()
+            (List.combine exprs tyExprs)
+    | Tuple _, _ -> raise (TyExn (UnexpectedTuple (ty, expr)))
+    | Record fields, TypeRecord fieldTypes ->
+        let fields' =
           List.map
-            (fun (ARecordFieldType (StellaIdent name, ty')) -> (name, ty'))
-            fieldTypes
+            (fun (ABinding (StellaIdent name, expr')) -> (name, expr'))
+            fields
         in
-        let rec convert (fields : (string * expr) list)
-            (types : (string * typeT) list)
-            ((fieldExpr, missingFields, extraFields) :
-              (expr * typeT) list * string list * string list) =
+        let rec findDupFields (fields : (string * _) list)
+            (dupFields : string list) =
           match fields with
-          | (name, expr) :: fields' -> (
-              match List.assoc_opt name types with
-              | Some ty ->
-                  convert fields'
-                    (List.remove_assoc name types)
-                    ((expr, ty) :: fieldExpr, missingFields, extraFields)
-              | _ ->
-                  convert fields'
-                    (List.remove_assoc name types)
-                    (fieldExpr, missingFields, name :: extraFields))
-          | _ ->
-              ( fieldExpr,
-                List.concat [ List.map (fun (a, _) -> a) types; missingFields ],
-                extraFields )
+          | (name, _) :: fields' ->
+              let dupFields' =
+                if List.mem_assoc name fields' && not (List.mem name dupFields)
+                then name :: dupFields
+                else dupFields
+              in
+              findDupFields fields' dupFields'
+          | _ -> dupFields
         in
-        let fieldExpr, missingFields, extraFields =
-          convert fields' fieldTypes' ([], [], [])
-        in
-        if List.compare_length_with extraFields 0 <> 0 then
-          raise (TyExn (UnexpectedRecordFields (extraFields, ty, expr)))
-        else if List.compare_length_with missingFields 0 <> 0 then
-          raise (TyExn (MissingRecordFields (missingFields, ty, expr)))
-        else List.iter (fun (expr', ty') -> typecheck ctx expr' ty') fieldExpr
-  | Record _, _ -> raise (TyExn (UnexpectedRecord (ty, expr)))
-  | ConsList (e1, e2), TypeList ty' ->
-      typecheck ctx e1 ty';
-      typecheck ctx e2 ty
-  | ConsList _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
-  | Head _, _ ->
-      let ty' = infer ctx expr in
-      if neq ty' ty then
-        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
-      else ()
-  | Tail _, _ ->
-      let ty' = infer ctx expr in
-      if neq ty' ty then
-        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
-      else ()
-  | IsEmpty _, _ ->
-      let ty' = infer ctx expr in
-      if neq ty' ty then
-        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
-      else ()
-  | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
-  | Inl _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
-  | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
-  | Inr _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
-  | Succ expr', TypeNat -> typecheck ctx expr' TypeNat
-  | Succ _, _ -> raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
-  | LogicNot expr', TypeBool -> typecheck ctx expr' TypeBool
-  | LogicNot _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | Pred expr', TypeNat -> typecheck ctx expr' TypeNat
-  | Pred _, _ -> raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
-  | IsZero expr', TypeBool -> typecheck ctx expr' TypeNat
-  | IsZero _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
-  | Fix _, _ ->
-      let ty' = infer ctx expr in
-      if neq ty' ty then
-        raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
-  | NatRec (eN, eZ, eS), _ ->
-      typecheck ctx eN TypeNat;
-      typecheck ctx eZ ty;
-      typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)))
-  | ConstTrue, TypeBool -> ()
-  | ConstTrue, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | ConstFalse, TypeBool -> ()
-  | ConstFalse, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
-  | ConstUnit, TypeUnit -> ()
-  | ConstUnit, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeUnit, expr)))
-  | ConstInt _, TypeNat -> ()
-  | ConstInt _, _ ->
-      raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
-  | Var (StellaIdent name), _ -> (
-      match get ctx name with
-      | None -> raise (TyExn (UndefinedVariable (name, expr)))
-      | Some ty' ->
-          if neq ty ty' then
-            raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
-          else ())
-  | a, _ ->
-      print_endline (ShowStella.show (ShowStella.showExpr a));
-      not_implemented ()
-
-and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
-  match expr with
-  | Sequence (e1, e2) ->
-      typecheck ctx e1 TypeUnit;
-      infer ctx e2
-  | If (eIf, eThen, eElse) ->
-      typecheck ctx eIf TypeBool;
-      let ty = infer ctx eThen in
-      typecheck ctx eElse ty;
-      ty
-  | Let (binders, expr') ->
-      (* TODO check semantics of let a = ..., b = a <- impossible in such tc *)
-      let bindersCtx =
-        List.concat_map
-          (fun (APatternBinding (p, expr'')) ->
-            deconstruct_pattern_binder p (infer ctx expr''))
-          binders
-      in
-      let ctx' = List.concat [ bindersCtx; ctx ] in
-      infer ctx' expr'
-  (* | LetRec of patternBinding list * expr TODO *)
-  | LessThan (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeBool
-  | LessThanOrEqual (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeBool
-  | GreaterThan (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeBool
-  | GreaterThanOrEqual (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeBool
-  | Equal (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeBool
-  | NotEqual (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeBool
-  | TypeAsc (expr', ty) ->
-      check_type ty;
-      typecheck ctx expr' ty;
-      ty
-  | Abstraction (params, expr') ->
-      let ctx' = put_params ctx params in
-      let tyReturn = infer ctx' expr' in
-      TypeFun (List.map (fun (AParamDecl (_, ty)) -> ty) params, tyReturn)
-  | Variant _ -> raise (TyExn (AmbiguousVariantType expr))
-  | Match (_, []) -> raise (TyExn (IllegalEmptyMatching expr))
-  | Match (expr', AMatchCase (pat, expr'') :: cases) ->
-      let ty' = infer ctx expr' in
-      let tyRes =
-        let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
-        infer ctx' expr''
-      in
-      List.iter
-        (fun (AMatchCase (pat, expr'')) ->
-          let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
-          typecheck ctx' expr'' tyRes)
-        cases;
-      let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
-      (match check_exhaustivness ps ty' with
-      | Some expr'' -> raise (TyExn (NonexhaustiveMatchPatterns (expr'', expr)))
-      | None -> ());
-      tyRes
-  | List (expr' :: exprs) ->
-      let ty = infer ctx expr' in
-      List.iter (fun expr'' -> typecheck ctx expr'' ty) exprs;
-      TypeList ty
-  | List [] -> raise (TyExn (AmbiguousList expr))
-  | Add (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeNat
-  | Subtract (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeNat
-  | LogicOr (e1, e2) ->
-      typecheck ctx e1 TypeBool;
-      typecheck ctx e2 TypeBool;
-      TypeBool
-  | Multiply (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeNat
-  | Divide (e1, e2) ->
-      typecheck ctx e1 TypeNat;
-      typecheck ctx e2 TypeNat;
-      TypeNat
-  | LogicAnd (e1, e2) ->
-      typecheck ctx e1 TypeBool;
-      typecheck ctx e2 TypeBool;
-      TypeBool
-  | Application (eFun, eArgs) -> (
-      (* TODO: Incorrect arity *)
-      let tyFun = infer ctx eFun in
-      match tyFun with
-      | TypeFun (tyArgs, tyReturn) ->
-          List.iter
-            (fun (eArg, tyArg) -> typecheck ctx eArg tyArg)
-            (List.combine eArgs tyArgs);
-          tyReturn
-      | _ -> raise (TyExn (NotAFunction (tyFun, expr))))
-  | DotRecord (expr', StellaIdent name) -> (
-      let tyRec = infer ctx expr' in
-      match tyRec with
-      | TypeRecord fields ->
-          let rec find_field (fields : recordFieldType list) =
-            match fields with
-            | ARecordFieldType (StellaIdent name', tyField) :: fields' ->
-                if name' = name then tyField else find_field fields'
-            | [] -> raise (TyExn (UnexpectedFieldAccess (tyRec, name, expr)))
+        let dupFields = findDupFields fields' [] in
+        if List.compare_length_with dupFields 0 <> 0 then
+          raise (TyExn (DuplicateRecordFields (dupFields, expr)))
+        else
+          let fieldTypes' =
+            List.map
+              (fun (ARecordFieldType (StellaIdent name, ty')) -> (name, ty'))
+              fieldTypes
           in
-          find_field fields
-      | _ -> raise (TyExn (NotARecord (tyRec, expr))))
-  | DotTuple (expr, n) -> (
-      let ty = infer ctx expr in
-      match ty with
-      | TypeTuple tyTuple ->
-          if List.compare_length_with tyTuple n < 0 || n <= 0 then
-            raise (TyExn (TupleIndexOutOfBounds (ty, n, expr)))
-          else List.nth tyTuple (n - 1)
-      | _ -> raise (TyExn (NotATuple (ty, expr))))
-  | Tuple exprs -> TypeTuple (List.map (infer ctx) exprs)
-  | Record bindings ->
-      let dup =
-        List.map (fun (ABinding (StellaIdent name, _)) -> name) bindings
-        |> find_dup
-      in
-      if List.compare_length_with dup 0 <> 0 then
-        raise (TyExn (DuplicateRecordFields (dup, expr)))
-      else
-        TypeRecord
-          (List.map
-             (fun (ABinding (ident, expr)) ->
-               ARecordFieldType (ident, infer ctx expr))
-             bindings)
-  | ConsList (eHead, eTail) ->
-      let ty = infer ctx eHead in
-      typecheck ctx eTail (TypeList ty);
-      TypeList ty
-  | Head expr' -> (
-      let ty = infer ctx expr' in
-      match ty with
-      | TypeList tyElem -> tyElem
-      | _ -> raise (TyExn (NotAList (ty, expr))))
-  | IsEmpty expr' -> (
-      let ty = infer ctx expr' in
-      match ty with
-      | TypeList _ -> TypeBool
-      | _ -> raise (TyExn (NotAList (ty, expr))))
-  | Tail expr' -> (
-      let ty = infer ctx expr' in
-      match ty with
-      | TypeList tyElem -> TypeList tyElem
-      | _ -> raise (TyExn (NotAList (ty, expr))))
-  | Inl _ -> raise (TyExn (AmbiguousSumType expr))
-  | Inr _ -> raise (TyExn (AmbiguousSumType expr))
-  | Succ expr' ->
-      typecheck ctx expr' TypeNat;
-      TypeNat
-  | LogicNot expr' ->
-      typecheck ctx expr' TypeBool;
-      TypeBool
-  | Pred expr' ->
-      typecheck ctx expr' TypeNat;
-      TypeNat
-  | IsZero expr' ->
-      typecheck ctx expr' TypeNat;
-      TypeBool
-  | Fix expr' -> (
-      let ty = infer ctx expr' in
-      match ty with
-      | TypeFun ([ tyArg ], tyRet) ->
-          if neq tyArg tyRet then
-            raise
-              (TyExn
-                 (UnexpectedTypeForExpression
-                    ( TypeFun ([ tyArg ], tyArg),
-                      TypeFun ([ tyArg ], tyRet),
-                      expr )))
-          else tyArg
-      | _ -> raise (TyExn (NotAFunction (ty, expr))))
-  | NatRec (eN, eZ, eS) ->
-      typecheck ctx eN TypeNat;
-      let ty = infer ctx eZ in
-      typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)));
-      ty
-  | ConstTrue -> TypeBool
-  | ConstFalse -> TypeBool
-  | ConstUnit -> TypeUnit
-  | ConstInt _ -> TypeNat
-  | Var (StellaIdent name) -> (
-      match get ctx name with
-      | Some ty -> ty
-      | None -> raise (TyExn (UndefinedVariable (name, expr))))
-  | _ -> not_implemented ()
+          let rec convert (fields : (string * expr) list)
+              (types : (string * typeT) list)
+              ((fieldExpr, missingFields, extraFields) :
+                (expr * typeT) list * string list * string list) =
+            match fields with
+            | (name, expr) :: fields' -> (
+                match List.assoc_opt name types with
+                | Some ty ->
+                    convert fields'
+                      (List.remove_assoc name types)
+                      ((expr, ty) :: fieldExpr, missingFields, extraFields)
+                | _ ->
+                    convert fields'
+                      (List.remove_assoc name types)
+                      (fieldExpr, missingFields, name :: extraFields))
+            | _ ->
+                ( fieldExpr,
+                  List.concat
+                    [ List.map (fun (a, _) -> a) types; missingFields ],
+                  extraFields )
+          in
+          let fieldExpr, missingFields, extraFields =
+            convert fields' fieldTypes' ([], [], [])
+          in
+          if List.compare_length_with extraFields 0 <> 0 then
+            raise (TyExn (UnexpectedRecordFields (extraFields, ty, expr)))
+          else if List.compare_length_with missingFields 0 <> 0 then
+            raise (TyExn (MissingRecordFields (missingFields, ty, expr)))
+          else List.iter (fun (expr', ty') -> typecheck ctx expr' ty') fieldExpr
+    | Record _, _ -> raise (TyExn (UnexpectedRecord (ty, expr)))
+    | ConsList (e1, e2), TypeList ty' ->
+        typecheck ctx e1 ty';
+        typecheck ctx e2 ty
+    | ConsList _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
+    | Head _, _ ->
+        let ty' = infer ctx expr in
+        if neq ty' ty then
+          raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+        else ()
+    | Tail _, _ ->
+        let ty' = infer ctx expr in
+        if neq ty' ty then
+          raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+        else ()
+    | IsEmpty _, _ ->
+        let ty' = infer ctx expr in
+        if neq ty' ty then
+          raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+        else ()
+    | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
+    | Inl _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
+    | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
+    | Inr _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
+    | Succ expr', TypeNat -> typecheck ctx expr' TypeNat
+    | Succ _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+    | LogicNot expr', TypeBool -> typecheck ctx expr' TypeBool
+    | LogicNot _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | Pred expr', TypeNat -> typecheck ctx expr' TypeNat
+    | Pred _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+    | IsZero expr', TypeBool -> typecheck ctx expr' TypeNat
+    | IsZero _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+    | Fix _, _ ->
+        let ty' = infer ctx expr in
+        if neq ty' ty then
+          raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+    | NatRec (eN, eZ, eS), _ ->
+        typecheck ctx eN TypeNat;
+        typecheck ctx eZ ty;
+        typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)))
+    | ConstTrue, TypeBool -> ()
+    | ConstTrue, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | ConstFalse, TypeBool -> ()
+    | ConstFalse, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | ConstUnit, TypeUnit -> ()
+    | ConstUnit, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeUnit, expr)))
+    | ConstInt _, TypeNat -> ()
+    | ConstInt _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+    | Var (StellaIdent name), _ -> (
+        match get ctx name with
+        | None -> raise (TyExn (UndefinedVariable (name, expr)))
+        | Some ty' ->
+            if neq ty ty' then
+              raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+            else ())
+    | a, _ ->
+        print_endline (ShowStella.show (ShowStella.showExpr a));
+        not_implemented ()
+
+  and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
+    match expr with
+    | Sequence (e1, e2) ->
+        typecheck ctx e1 TypeUnit;
+        infer ctx e2
+    | If (eIf, eThen, eElse) ->
+        typecheck ctx eIf TypeBool;
+        let ty = infer ctx eThen in
+        typecheck ctx eElse ty;
+        ty
+    | Let (binders, expr') ->
+        (* TODO check semantics of let a = ..., b = a <- impossible in such tc *)
+        let bindersCtx =
+          List.concat_map
+            (fun (APatternBinding (p, expr'')) ->
+              deconstruct_pattern_binder p (infer ctx expr''))
+            binders
+        in
+        let ctx' = List.concat [ bindersCtx; ctx ] in
+        infer ctx' expr'
+    (* | LetRec of patternBinding list * expr TODO *)
+    | LessThan (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeBool
+    | LessThanOrEqual (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeBool
+    | GreaterThan (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeBool
+    | GreaterThanOrEqual (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeBool
+    | Equal (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeBool
+    | NotEqual (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeBool
+    | TypeAsc (expr', ty) ->
+        check_type ty;
+        typecheck ctx expr' ty;
+        ty
+    | Abstraction (params, expr') ->
+        let ctx' = put_params ctx params in
+        let tyReturn = infer ctx' expr' in
+        TypeFun (List.map (fun (AParamDecl (_, ty)) -> ty) params, tyReturn)
+    | Variant _ -> raise (TyExn (AmbiguousVariantType expr))
+    | Match (_, []) -> raise (TyExn (IllegalEmptyMatching expr))
+    | Match (expr', AMatchCase (pat, expr'') :: cases) ->
+        let ty' = infer ctx expr' in
+        let tyRes =
+          let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
+          infer ctx' expr''
+        in
+        List.iter
+          (fun (AMatchCase (pat, expr'')) ->
+            let ctx' =
+              List.concat [ deconstruct_pattern_binder pat ty'; ctx ]
+            in
+            typecheck ctx' expr'' tyRes)
+          cases;
+        let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
+        (match check_exhaustivness ps ty' with
+        | Some expr'' ->
+            raise (TyExn (NonexhaustiveMatchPatterns (expr'', expr)))
+        | None -> ());
+        tyRes
+    | List (expr' :: exprs) ->
+        let ty = infer ctx expr' in
+        List.iter (fun expr'' -> typecheck ctx expr'' ty) exprs;
+        TypeList ty
+    | List [] -> TypeList (Ctx.ambiguous (TyExn (AmbiguousList expr)))
+    | Add (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeNat
+    | Subtract (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeNat
+    | LogicOr (e1, e2) ->
+        typecheck ctx e1 TypeBool;
+        typecheck ctx e2 TypeBool;
+        TypeBool
+    | Multiply (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeNat
+    | Divide (e1, e2) ->
+        typecheck ctx e1 TypeNat;
+        typecheck ctx e2 TypeNat;
+        TypeNat
+    | LogicAnd (e1, e2) ->
+        typecheck ctx e1 TypeBool;
+        typecheck ctx e2 TypeBool;
+        TypeBool
+    | Application (eFun, eArgs) -> (
+        (* TODO: Incorrect arity *)
+        let tyFun = infer ctx eFun in
+        match tyFun with
+        | TypeFun (tyArgs, tyReturn) ->
+            List.iter
+              (fun (eArg, tyArg) -> typecheck ctx eArg tyArg)
+              (List.combine eArgs tyArgs);
+            tyReturn
+        | _ -> raise (TyExn (NotAFunction (tyFun, expr))))
+    | DotRecord (expr', StellaIdent name) -> (
+        let tyRec = infer ctx expr' in
+        match tyRec with
+        | TypeRecord fields ->
+            let rec find_field (fields : recordFieldType list) =
+              match fields with
+              | ARecordFieldType (StellaIdent name', tyField) :: fields' ->
+                  if name' = name then tyField else find_field fields'
+              | [] -> raise (TyExn (UnexpectedFieldAccess (tyRec, name, expr)))
+            in
+            find_field fields
+        | _ -> raise (TyExn (NotARecord (tyRec, expr))))
+    | DotTuple (expr, n) -> (
+        let ty = infer ctx expr in
+        match ty with
+        | TypeTuple tyTuple ->
+            if List.compare_length_with tyTuple n < 0 || n <= 0 then
+              raise (TyExn (TupleIndexOutOfBounds (ty, n, expr)))
+            else List.nth tyTuple (n - 1)
+        | _ -> raise (TyExn (NotATuple (ty, expr))))
+    | Tuple exprs -> TypeTuple (List.map (infer ctx) exprs)
+    | Record bindings ->
+        let dup =
+          List.map (fun (ABinding (StellaIdent name, _)) -> name) bindings
+          |> find_dup
+        in
+        if List.compare_length_with dup 0 <> 0 then
+          raise (TyExn (DuplicateRecordFields (dup, expr)))
+        else
+          TypeRecord
+            (List.map
+               (fun (ABinding (ident, expr)) ->
+                 ARecordFieldType (ident, infer ctx expr))
+               bindings)
+    | ConsList (eHead, eTail) ->
+        let ty = infer ctx eHead in
+        typecheck ctx eTail (TypeList ty);
+        TypeList ty
+    | Head expr' -> (
+        let ty = infer ctx expr' in
+        match ty with
+        | TypeList tyElem -> tyElem
+        | _ -> raise (TyExn (NotAList (ty, expr))))
+    | IsEmpty expr' -> (
+        let ty = infer ctx expr' in
+        match ty with
+        | TypeList _ -> TypeBool
+        | _ -> raise (TyExn (NotAList (ty, expr))))
+    | Tail expr' -> (
+        let ty = infer ctx expr' in
+        match ty with
+        | TypeList tyElem -> TypeList tyElem
+        | _ -> raise (TyExn (NotAList (ty, expr))))
+    | Inl expr' -> 
+      let right = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
+      let left = infer ctx expr' in
+      TypeSum (left, right)
+    | Inr expr' -> 
+      let left = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
+      let right = infer ctx expr' in
+      TypeSum (left, right)
+    | Succ expr' ->
+        typecheck ctx expr' TypeNat;
+        TypeNat
+    | LogicNot expr' ->
+        typecheck ctx expr' TypeBool;
+        TypeBool
+    | Pred expr' ->
+        typecheck ctx expr' TypeNat;
+        TypeNat
+    | IsZero expr' ->
+        typecheck ctx expr' TypeNat;
+        TypeBool
+    | Fix expr' -> (
+        let ty = infer ctx expr' in
+        match ty with
+        | TypeFun ([ tyArg ], tyRet) ->
+            if neq tyArg tyRet then
+              raise
+                (TyExn
+                   (UnexpectedTypeForExpression
+                      ( TypeFun ([ tyArg ], tyArg),
+                        TypeFun ([ tyArg ], tyRet),
+                        expr )))
+            else tyArg
+        | _ -> raise (TyExn (NotAFunction (ty, expr))))
+    | NatRec (eN, eZ, eS) ->
+        typecheck ctx eN TypeNat;
+        let ty = infer ctx eZ in
+        typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)));
+        ty
+    | ConstTrue -> TypeBool
+    | ConstFalse -> TypeBool
+    | ConstUnit -> TypeUnit
+    | ConstInt _ -> TypeNat
+    | Var (StellaIdent name) -> (
+        match get ctx name with
+        | Some ty -> ty
+        | None -> raise (TyExn (UndefinedVariable (name, expr))))
+    | _ -> not_implemented ()
+end
 
 let typecheckProgram (program : program) =
   match program with
-  | AProgram (_, _, decls) ->
+  | AProgram (_, extensions, decls) ->
+      let extensions' =
+        List.concat_map
+          (fun (AnExtension ext) ->
+            List.map (fun (ExtensionName name) -> name) ext)
+          extensions
+      in
+      let ambiguous =
+        if List.mem "#ambiguous-type-as-bottom" extensions' then fun e ->
+          TypeBottom
+        else fun e -> raise e
+      in
+      let module M = Typecheck (struct
+        let ambiguous = ambiguous
+      end) in
+      let typecheck = M.typecheck in
       let ctx =
         List.fold_left
           (fun a b ->
