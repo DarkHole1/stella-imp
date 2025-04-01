@@ -224,6 +224,37 @@ let test_seq () =
   check_err "0 ; true <=> Bool" E.common (o |- "0 ; true" <=> "Bool");
   check_err "[unit] ; [{0, unit}] <=> [{Nat, Unit}]" E.common (o |- "[unit] ; [{0, unit}]" <=> "[{Nat, Unit}]")
 
+let test_ref () =
+  check "new (0) <=> & Nat" (o |- "new (0)" <=> "& Nat");
+  check "new (true) <=> & Bool" (o |- "new (true)" <=> "& Bool");
+  check "new ({0, true}) <=> & {Nat, Bool}" (o |- "new ({0, true})" <=> "& {Nat, Bool}");
+
+  check "<0x00> <= & Nat" (o |- "<0x00>" <= "& Nat");
+  check "<0x00> <= & Bool" (o |- "<0x00>" <= "& Bool");
+  check "<0x00> <= & <|l : Bool|>" (o |- "<0x00>" <= "& <|l : Bool|>");
+
+  check_err "<0x00> => & Nat" E.common (o |- "<0x00>" => "& Nat");
+
+  check "*(new (0)) <=> Nat" (o |- "*(new (0))" <=> "Nat");
+  check "*(new (true)) <=> Bool" (o |- "*(new (true))" <=> "Bool");
+  check "*(new ({0, true})) <=> {Nat, Bool}" (o |- "*(new ({0, true}))" <=> "{Nat, Bool}");
+
+  check_err "*true <=> Bool" E.common (o |- "*true" <=> "Bool");
+  check_err "*false <=> Bool" E.common (o |- "*false" <=> "Bool");
+  check_err "*0 <=> Nat" E.common (o |- "*0" <=> "Nat");
+
+  check "(new(0)) := 0 <=> Unit" (o |- "(new(0)) := 0" <=> "Unit");
+  check "(new(true)) := false <=> Unit" (o |- "(new(true)) := false" <=> "Unit");
+  check "(new([unit])) := [unit, unit] <=> Unit" (o |- "(new([unit])) := [unit, unit]" <=> "Unit");
+
+  check_err "(new(0)) := [false] <=> Unit" E.common (o |- "(new(0)) := [false]" <=> "Unit");
+  check_err "(new(true)) := [false] <=> Unit" E.common (o |- "(new(true)) := [false]" <=> "Unit");
+  check_err "(new([unit])) := [false] <=> Unit" E.common (o |- "(new([unit])) := [false]" <=> "Unit");
+
+  check_err "0 := 0 <=> Unit" E.common (o |- "0 := 0" <=> "Unit");
+  check_err "true := false <=> Unit" E.common (o |- "true := false" <=> "Unit");
+  check_err "[unit] := [unit, unit] <=> Unit" E.common (o |- "[unit] := [unit, unit]" <=> "Unit")
+
 let () =
   Alcotest.run "Typecheck"
     [
@@ -240,6 +271,7 @@ let () =
         [ Alcotest.test_case "Basic errors" `Quick test_basic_errors ] );
       ("match-typecheck", []);
       ("extensions", [
-        Alcotest.test_case "Sequencing" `Quick test_seq
+        Alcotest.test_case "Sequencing" `Quick test_seq;
+        Alcotest.test_case "References" `Quick test_ref;
       ]);
     ]
