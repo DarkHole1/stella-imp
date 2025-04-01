@@ -219,9 +219,7 @@ let rec eq (ty1 : typeT) (ty2 : typeT) : bool =
   | TypeBool, TypeBool -> true
   | TypeNat, TypeNat -> true
   | TypeUnit, TypeUnit -> true
-  (*
-  | TypeRef of typeT
- *)
+  | TypeRef ty1, TypeRef ty2 -> eq ty1 ty2
   | _ -> false
 
 let neq (ty1 : typeT) (ty2 : typeT) : bool = eq ty1 ty2 |> not
@@ -568,6 +566,12 @@ module Typecheck (Ctx : Context) = struct
     | Sequence (e1, e2), _ ->
         typecheck ctx e1 TypeUnit;
         typecheck ctx e2 ty
+    | Assign (e1, e2), TypeUnit -> (
+        match infer ctx e1 with
+        | TypeRef ty' -> typecheck ctx e2 ty'
+        | ty' -> raise (TyExn (NotAReference (ty', e1))))
+    | Assign _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, TypeUnit, expr)))
     | If (eIf, eThen, eElse), _ ->
         typecheck ctx eIf TypeBool;
         typecheck ctx eThen ty;
@@ -696,6 +700,14 @@ module Typecheck (Ctx : Context) = struct
         typecheck ctx e2 TypeBool
     | LogicAnd _, _ ->
         raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
+    | Ref expr', TypeRef ty' -> typecheck ctx expr' ty'
+    | Ref _, _ ->
+        raise (TyExn (UnexpectedTypeForExpression (ty, infer ctx expr, expr)))
+    | Deref _, _ ->
+        let ty' = infer ctx expr in
+        if neq ty' ty then
+          raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
+        else ()
     | Application _, _ ->
         let ty' = infer ctx expr in
         if neq ty' ty then
@@ -835,6 +847,8 @@ module Typecheck (Ctx : Context) = struct
     | ConstInt _, TypeNat -> ()
     | ConstInt _, _ ->
         raise (TyExn (UnexpectedTypeForExpression (ty, TypeNat, expr)))
+    | ConstMemory _, TypeRef _ -> ()
+    | ConstMemory _, _ -> raise (TyExn (UnexpectedMemoryAddress (ty, expr)))
     | Var (StellaIdent name), _ -> (
         match get ctx name with
         | None -> raise (TyExn (UndefinedVariable (name, expr)))
@@ -851,6 +865,11 @@ module Typecheck (Ctx : Context) = struct
     | Sequence (e1, e2) ->
         typecheck ctx e1 TypeUnit;
         infer ctx e2
+    | Assign (e1, e2) ->
+        (match infer ctx e1 with
+        | TypeRef ty' -> typecheck ctx e2 ty'
+        | ty' -> raise (TyExn (NotAReference (ty', e1))));
+        TypeUnit
     | If (eIf, eThen, eElse) ->
         typecheck ctx eIf TypeBool;
         let ty = infer ctx eThen in
@@ -949,6 +968,11 @@ module Typecheck (Ctx : Context) = struct
         typecheck ctx e1 TypeBool;
         typecheck ctx e2 TypeBool;
         TypeBool
+    | Ref expr' -> TypeRef (infer ctx expr')
+    | Deref expr' -> (
+        match infer ctx expr' with
+        | TypeRef ty' -> ty'
+        | ty' -> raise (TyExn (NotAReference (ty', expr'))))
     | Application (eFun, eArgs) -> (
         (* TODO: Incorrect arity *)
         let tyFun = infer ctx eFun in
@@ -1054,6 +1078,8 @@ module Typecheck (Ctx : Context) = struct
     | ConstFalse -> TypeBool
     | ConstUnit -> TypeUnit
     | ConstInt _ -> TypeNat
+    | ConstMemory _ ->
+        TypeRef (Ctx.ambiguous (TyExn (AmbiguousReferenceType expr)))
     | Var (StellaIdent name) -> (
         match get ctx name with
         | Some ty -> ty
