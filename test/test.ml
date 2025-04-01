@@ -215,6 +215,15 @@ let test_basic_errors () =
     (o |- "inl(true) as (Bool + <| foo : Nat, foo : Nat |>)"
    => "Bool + <| foo : Nat |>")
 
+let test_seq () = 
+  check "unit ; 0 <=> Nat" (o |- "unit ; 0" <=> "Nat");
+  check "unit ; true <=> Bool" (o |- "unit ; true" <=> "Bool");
+  check "unit ; [{0, unit}] <=> [{Nat, Unit}]" (o |- "unit ; [{0, unit}]" <=> "[{Nat, Unit}]");
+
+  check_err "true ; 0 <=> Nat" E.common (o |- "true ; 0" <=> "Nat");
+  check_err "0 ; true <=> Bool" E.common (o |- "0 ; true" <=> "Bool");
+  check_err "[unit] ; [{0, unit}] <=> [{Nat, Unit}]" E.common (o |- "[unit] ; [{0, unit}]" <=> "[{Nat, Unit}]")
+
 let () =
   Alcotest.run "Typecheck"
     [
@@ -230,5 +239,7 @@ let () =
       ( "basic-errors",
         [ Alcotest.test_case "Basic errors" `Quick test_basic_errors ] );
       ("match-typecheck", []);
-      ("extensions", []);
+      ("extensions", [
+        Alcotest.test_case "Sequencing" `Quick test_seq
+      ]);
     ]
