@@ -30,6 +30,13 @@ type tyError =
   | DuplicateRecordFields of string list * expr
   | DuplicateRecordTypeFields of string list * typeT
   | DuplicateVariantTypeFields of string list * typeT
+  | ExceptionTypeNotDeclared of expr
+  | AmbiguousThrowType of expr
+  | AmbiguousReferenceType of expr
+  | AmbiguousPanicType of expr
+  | NotAReference of typeT * expr
+  | UnexpectedMemoryAddress of typeT * expr
+  | UnexpectedSubtype of typeT * typeT * expr
 
 exception TyExn of tyError
 
@@ -143,11 +150,33 @@ let show_error (err : tyError) : string =
       "ERROR_DUPLICATE_RECORD_FIELDS\n  в выражении\n    " ^ prtExpr expr
       ^ "\n  дублируются поля\n    " ^ String.concat "\n    " dup
   | DuplicateRecordTypeFields (dup, ty) ->
-      "ERROR_DUPLICATE_RECORD_TYPE_FIELDS\n  в типа\n    " ^ prtTypeT ty
+      "ERROR_DUPLICATE_RECORD_TYPE_FIELDS\n  в типе\n    " ^ prtTypeT ty
       ^ "\n  дублируются поля\n    " ^ String.concat "\n    " dup
   | DuplicateVariantTypeFields (dup, ty) ->
-      "ERROR_DUPLICATE_VARIANT_TYPE_FIELDS\n  в типа\n    " ^ prtTypeT ty
+      "ERROR_DUPLICATE_VARIANT_TYPE_FIELDS\n  в типе\n    " ^ prtTypeT ty
       ^ "\n  дублируются варианты\n    " ^ String.concat "\n    " dup
+  | ExceptionTypeNotDeclared expr ->
+      "ERROR_EXCEPTION_TYPE_NOT_DECLARED\n  в выражении\n    " ^ prtExpr expr
+      ^ "\n  используются ошибки, но их тип не определён в программе"
+  | AmbiguousThrowType expr ->
+      "ERROR_AMBIGUOUS_THROW_TYPE\n  в выражении\n    " ^ prtExpr expr
+      ^ "\n  невозможно определить тип throw"
+  | AmbiguousReferenceType expr ->
+      "ERROR_AMBIGUOUS_REFERENCE_TYPE\n  в выражении\n    " ^ prtExpr expr
+      ^ "\n  невозможно определить тип адреса памяти"
+  | AmbiguousPanicType expr ->
+      "ERROR_AMBIGUOUS_PANIC_TYPE\n  в выражении\n    " ^ prtExpr expr
+      ^ "\n  невозможно определить тип ошибки"
+  | NotAReference (ty, expr) ->
+      "ERROR_NOT_A_REFERENCE\n  ожидалась ссылка в выражении\n    "
+      ^ prtExpr expr ^ "\n  но получен тип\n    " ^ prtTypeT ty
+  | UnexpectedMemoryAddress (ty, expr) ->
+      "ERROR_UNEXPECTED_MEMORY_ADDRESS\n  ожидался тип\n    " ^ prtTypeT ty
+      ^ "\n  но получен адрес памяти в выражении\n    " ^ prtExpr expr
+  | UnexpectedSubtype (ty1, ty2, expr) ->
+      "ERROR_UNEXPECTED_SUBTYPE\n  ожидался подтип типа\n    " ^ prtTypeT ty1
+      ^ "\n  но получен тип\n    " ^ prtTypeT ty2 ^ "\n  в выражении\n    "
+      ^ prtExpr expr
 
 type context = (string * typeT) list
 
@@ -983,14 +1012,14 @@ module Typecheck (Ctx : Context) = struct
         match ty with
         | TypeList tyElem -> TypeList tyElem
         | _ -> raise (TyExn (NotAList (ty, expr))))
-    | Inl expr' -> 
-      let right = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
-      let left = infer ctx expr' in
-      TypeSum (left, right)
-    | Inr expr' -> 
-      let left = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
-      let right = infer ctx expr' in
-      TypeSum (left, right)
+    | Inl expr' ->
+        let right = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
+        let left = infer ctx expr' in
+        TypeSum (left, right)
+    | Inr expr' ->
+        let left = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
+        let right = infer ctx expr' in
+        TypeSum (left, right)
     | Succ expr' ->
         typecheck ctx expr' TypeNat;
         TypeNat
