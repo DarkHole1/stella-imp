@@ -255,6 +255,13 @@ let test_ref () =
   check_err "true := false <=> Unit" E.common (o |- "true := false" <=> "Unit");
   check_err "[unit] := [unit, unit] <=> Unit" E.common (o |- "[unit] := [unit, unit]" <=> "Unit")
 
+let test_panic () =
+  check "panic! <= Bool" (o |- "panic!" <= "Bool");
+  check "panic! <= Nat" (o |- "panic!" <= "Nat");
+  check "panic! <= {Bool, Nat}" (o |- "panic!" <= "{Bool, Nat}");
+
+  check_err "panic! => Bool" E.common (o |- "panic!" => "Bool")
+
 let () =
   Alcotest.run "Typecheck"
     [
@@ -273,5 +280,6 @@ let () =
       ("extensions", [
         Alcotest.test_case "Sequencing" `Quick test_seq;
         Alcotest.test_case "References" `Quick test_ref;
+        Alcotest.test_case "Panics" `Quick test_panic;
       ]);
     ]
