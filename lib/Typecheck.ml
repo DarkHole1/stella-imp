@@ -811,6 +811,7 @@ module Typecheck (Ctx : Context) = struct
         if neq ty' ty then
           raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
         else ()
+    | Panic, _ -> ()
     | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
     | Inl _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
     | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
@@ -1036,6 +1037,7 @@ module Typecheck (Ctx : Context) = struct
         match ty with
         | TypeList tyElem -> TypeList tyElem
         | _ -> raise (TyExn (NotAList (ty, expr))))
+    | Panic -> Ctx.ambiguous (TyExn (AmbiguousPanicType expr))
     | Inl expr' ->
         let right = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
         let left = infer ctx expr' in
