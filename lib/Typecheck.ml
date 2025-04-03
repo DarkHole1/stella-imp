@@ -553,6 +553,7 @@ let put_params (ctx : context) (params : paramDecl list) : context =
 
 module type Context = sig
   val ambiguous : exn -> typeT
+  val exception_type : typeT option
 end
 
 module Typecheck (Ctx : Context) = struct
@@ -812,6 +813,24 @@ module Typecheck (Ctx : Context) = struct
           raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
         else ()
     | Panic, _ -> ()
+    | Throw expr', _ -> (
+        match Ctx.exception_type with
+        | Some ty' -> typecheck ctx expr' ty'
+        | None -> raise (TyExn (ExceptionTypeNotDeclared expr)))
+    | TryCatch (e1, pat, e2), _ ->
+        typecheck ctx e1 ty;
+        let exception_type =
+          match Ctx.exception_type with
+          | Some ty -> ty
+          | None -> raise (TyExn (ExceptionTypeNotDeclared expr))
+        in
+        let ctx' =
+          List.concat [ deconstruct_pattern_binder pat exception_type ]
+        in
+        typecheck ctx' e2 ty
+    | TryWith (e1, e2), _ ->
+        typecheck ctx e1 ty;
+        typecheck ctx e2 ty
     | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
     | Inl _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
     | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
@@ -1038,6 +1057,28 @@ module Typecheck (Ctx : Context) = struct
         | TypeList tyElem -> TypeList tyElem
         | _ -> raise (TyExn (NotAList (ty, expr))))
     | Panic -> Ctx.ambiguous (TyExn (AmbiguousPanicType expr))
+    | Throw expr' ->
+        let tyRes = Ctx.ambiguous (TyExn (AmbiguousThrowType expr)) in
+        (match Ctx.exception_type with
+        | Some ty' -> typecheck ctx expr' ty'
+        | None -> raise (TyExn (ExceptionTypeNotDeclared expr)));
+        tyRes
+    | TryCatch (e1, pat, e2) ->
+        let ty = infer ctx e1 in
+        let exception_type =
+          match Ctx.exception_type with
+          | Some ty -> ty
+          | None -> raise (TyExn (ExceptionTypeNotDeclared expr))
+        in
+        let ctx' =
+          List.concat [ deconstruct_pattern_binder pat exception_type ]
+        in
+        typecheck ctx' e2 ty;
+        ty
+    | TryWith (e1, e2) ->
+        let ty = infer ctx e1 in
+        typecheck ctx e2 ty;
+        ty
     | Inl expr' ->
         let right = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
         let left = infer ctx expr' in
@@ -1103,8 +1144,15 @@ let typecheckProgram (program : program) =
           TypeBottom
         else fun e -> raise e
       in
+      let exception_type =
+        List.find_map
+          (fun decl ->
+            match decl with DeclExceptionType ty -> Some ty | _ -> None)
+          decls
+      in
       let module M = Typecheck (struct
         let ambiguous = ambiguous
+        let exception_type = exception_type
       end) in
       let typecheck = M.typecheck in
       let ctx =
