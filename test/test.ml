@@ -286,16 +286,31 @@ let test_errors () =
     check
       ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") <= {a : {Bool, Nat}}")
       (o |- "throw (" ^ tyv ^ ")" <= "{a : {Bool, Nat}}");
+
     check_err
       ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") => Nat")
       E.common
-      (o |- "throw (" ^ tyv ^ ")" => "Nat")
+      (o |- "throw (" ^ tyv ^ ")" => "Nat");
+
+    check
+      ("(" ^ tyn ^ ") try { 0 } with { 0 } <=> Nat")
+      (o |- "try { 0 } with { 0 }" <=> "Nat");
+    check
+      ("(" ^ tyn ^ ") try { true } with { false } <=> Bool")
+      (o |- "try { true } with { false }" <=> "Bool");
+    check
+      ("(" ^ tyn ^ ") try { throw(" ^ tyv ^ ") } with { false } <= Bool")
+      (o |- "try { throw(" ^ tyv ^ ") } with { false }" <= "Bool");
+    check
+      ("(" ^ tyn ^ ") try { throw(" ^ tyv ^ ") } catch { _ => false } <= Bool")
+      (o |- "try { throw(" ^ tyv ^ ") } catch { _ => false }" <= "Bool")
   in
   test "Nat" "0" Stella.AbsStella.TypeNat;
   test "Nat" "succ(0)" Stella.AbsStella.TypeNat;
   test "Nat" "Nat::pred(0)" Stella.AbsStella.TypeNat;
   test "Bool" "true" Stella.AbsStella.TypeBool;
-  test "Bool" "false" Stella.AbsStella.TypeBool
+  test "{Bool, Unit, Nat}" "{not (true), unit, {0, true}.1}"
+    Stella.AbsStella.(TypeTuple [ TypeBool; TypeUnit; TypeNat ])
 
 let () =
   Alcotest.run "Typecheck"
