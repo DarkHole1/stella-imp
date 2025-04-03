@@ -215,19 +215,22 @@ let test_basic_errors () =
     (o |- "inl(true) as (Bool + <| foo : Nat, foo : Nat |>)"
    => "Bool + <| foo : Nat |>")
 
-let test_seq () = 
+let test_seq () =
   check "unit ; 0 <=> Nat" (o |- "unit ; 0" <=> "Nat");
   check "unit ; true <=> Bool" (o |- "unit ; true" <=> "Bool");
-  check "unit ; [{0, unit}] <=> [{Nat, Unit}]" (o |- "unit ; [{0, unit}]" <=> "[{Nat, Unit}]");
+  check "unit ; [{0, unit}] <=> [{Nat, Unit}]"
+    (o |- "unit ; [{0, unit}]" <=> "[{Nat, Unit}]");
 
   check_err "true ; 0 <=> Nat" E.common (o |- "true ; 0" <=> "Nat");
   check_err "0 ; true <=> Bool" E.common (o |- "0 ; true" <=> "Bool");
-  check_err "[unit] ; [{0, unit}] <=> [{Nat, Unit}]" E.common (o |- "[unit] ; [{0, unit}]" <=> "[{Nat, Unit}]")
+  check_err "[unit] ; [{0, unit}] <=> [{Nat, Unit}]" E.common
+    (o |- "[unit] ; [{0, unit}]" <=> "[{Nat, Unit}]")
 
 let test_ref () =
   check "new (0) <=> & Nat" (o |- "new (0)" <=> "& Nat");
   check "new (true) <=> & Bool" (o |- "new (true)" <=> "& Bool");
-  check "new ({0, true}) <=> & {Nat, Bool}" (o |- "new ({0, true})" <=> "& {Nat, Bool}");
+  check "new ({0, true}) <=> & {Nat, Bool}"
+    (o |- "new ({0, true})" <=> "& {Nat, Bool}");
 
   check "<0x00> <= & Nat" (o |- "<0x00>" <= "& Nat");
   check "<0x00> <= & Bool" (o |- "<0x00>" <= "& Bool");
@@ -237,7 +240,8 @@ let test_ref () =
 
   check "*(new (0)) <=> Nat" (o |- "*(new (0))" <=> "Nat");
   check "*(new (true)) <=> Bool" (o |- "*(new (true))" <=> "Bool");
-  check "*(new ({0, true})) <=> {Nat, Bool}" (o |- "*(new ({0, true}))" <=> "{Nat, Bool}");
+  check "*(new ({0, true})) <=> {Nat, Bool}"
+    (o |- "*(new ({0, true}))" <=> "{Nat, Bool}");
 
   check_err "*true <=> Bool" E.common (o |- "*true" <=> "Bool");
   check_err "*false <=> Bool" E.common (o |- "*false" <=> "Bool");
@@ -245,15 +249,20 @@ let test_ref () =
 
   check "(new(0)) := 0 <=> Unit" (o |- "(new(0)) := 0" <=> "Unit");
   check "(new(true)) := false <=> Unit" (o |- "(new(true)) := false" <=> "Unit");
-  check "(new([unit])) := [unit, unit] <=> Unit" (o |- "(new([unit])) := [unit, unit]" <=> "Unit");
+  check "(new([unit])) := [unit, unit] <=> Unit"
+    (o |- "(new([unit])) := [unit, unit]" <=> "Unit");
 
-  check_err "(new(0)) := [false] <=> Unit" E.common (o |- "(new(0)) := [false]" <=> "Unit");
-  check_err "(new(true)) := [false] <=> Unit" E.common (o |- "(new(true)) := [false]" <=> "Unit");
-  check_err "(new([unit])) := [false] <=> Unit" E.common (o |- "(new([unit])) := [false]" <=> "Unit");
+  check_err "(new(0)) := [false] <=> Unit" E.common
+    (o |- "(new(0)) := [false]" <=> "Unit");
+  check_err "(new(true)) := [false] <=> Unit" E.common
+    (o |- "(new(true)) := [false]" <=> "Unit");
+  check_err "(new([unit])) := [false] <=> Unit" E.common
+    (o |- "(new([unit])) := [false]" <=> "Unit");
 
   check_err "0 := 0 <=> Unit" E.common (o |- "0 := 0" <=> "Unit");
   check_err "true := false <=> Unit" E.common (o |- "true := false" <=> "Unit");
-  check_err "[unit] := [unit, unit] <=> Unit" E.common (o |- "[unit] := [unit, unit]" <=> "Unit")
+  check_err "[unit] := [unit, unit] <=> Unit" E.common
+    (o |- "[unit] := [unit, unit]" <=> "Unit")
 
 let test_panic () =
   check "panic! <= Bool" (o |- "panic!" <= "Bool");
@@ -261,6 +270,32 @@ let test_panic () =
   check "panic! <= {Bool, Nat}" (o |- "panic!" <= "{Bool, Nat}");
 
   check_err "panic! => Bool" E.common (o |- "panic!" => "Bool")
+
+let test_errors () =
+  let test tyn tyv ty =
+    let open Make (struct
+      let ambiguous = raise
+      let exception_type = Some ty
+    end) in
+    check
+      ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") <= Nat")
+      (o |- "throw (" ^ tyv ^ ")" <= "Nat");
+    check
+      ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") <= Bool")
+      (o |- "throw (" ^ tyv ^ ")" <= "Bool");
+    check
+      ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") <= {a : {Bool, Nat}}")
+      (o |- "throw (" ^ tyv ^ ")" <= "{a : {Bool, Nat}}");
+    check_err
+      ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") => Nat")
+      E.common
+      (o |- "throw (" ^ tyv ^ ")" => "Nat")
+  in
+  test "Nat" "0" Stella.AbsStella.TypeNat;
+  test "Nat" "succ(0)" Stella.AbsStella.TypeNat;
+  test "Nat" "Nat::pred(0)" Stella.AbsStella.TypeNat;
+  test "Bool" "true" Stella.AbsStella.TypeBool;
+  test "Bool" "false" Stella.AbsStella.TypeBool
 
 let () =
   Alcotest.run "Typecheck"
@@ -277,9 +312,11 @@ let () =
       ( "basic-errors",
         [ Alcotest.test_case "Basic errors" `Quick test_basic_errors ] );
       ("match-typecheck", []);
-      ("extensions", [
-        Alcotest.test_case "Sequencing" `Quick test_seq;
-        Alcotest.test_case "References" `Quick test_ref;
-        Alcotest.test_case "Panics" `Quick test_panic;
-      ]);
+      ( "extensions",
+        [
+          Alcotest.test_case "Sequencing" `Quick test_seq;
+          Alcotest.test_case "References" `Quick test_ref;
+          Alcotest.test_case "Panics" `Quick test_panic;
+          Alcotest.test_case "Errors" `Quick test_errors;
+        ] );
     ]

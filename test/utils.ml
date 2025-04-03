@@ -15,73 +15,78 @@ let parse_string_expr (s : string) =
 let parse_string_typeT (s : string) =
   Lexing.from_string s |> ParStella.pTypeT LexStella.token
 
-module EmptyTypecheck = Typecheck.Typecheck (struct
+module Make (Ctx : Typecheck.Context) = struct
+  module TC = Typecheck.Typecheck (Ctx)
+
+  let typecheck (ctx : Typecheck.context) (expr : string) (ty : string) =
+    let ctx' = ctx in
+    let expr' = parse_string_expr expr in
+    let ty' = parse_string_typeT ty in
+    TC.typecheck ctx' expr' ty'
+
+  let typecheck' = typecheck []
+  let check_typecheck (_ : string) = typecheck
+  let check_typecheck' (_ : string) = typecheck'
+
+  let infer (ctx : Typecheck.context) (expr : string) =
+    let ctx' = ctx in
+    let expr' = parse_string_expr expr in
+    TC.infer ctx' expr'
+
+  let infer' = infer []
+
+  let check_infer (d : string) (ty : string) (ctx : Typecheck.context)
+      (expr : string) =
+    let ty' = parse_string_typeT ty in
+    Alcotest.check typeT d ty' (infer ctx expr)
+
+  let check_infer' (d : string) (ty : string) (expr : string) =
+    let ty' = parse_string_typeT ty in
+    Alcotest.check typeT d ty' (infer [] expr)
+
+  type what = Check | Infer | Both
+
+  let o : Typecheck.context = []
+  let in_context (ctx : Typecheck.context) (expr : string) = (ctx, expr)
+
+  let check_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
+    (Check, ctx, expr, ty)
+
+  let infer_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
+    (Infer, ctx, expr, ty)
+
+  let both_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
+    (Both, ctx, expr, ty)
+
+  let check (d : string)
+      ((w, ctx, expr, ty) : what * Typecheck.context * string * string) =
+    match w with
+    | Check -> check_typecheck d ctx expr ty
+    | Infer -> check_infer d ty ctx expr
+    | Both ->
+        check_typecheck d ctx expr ty;
+        check_infer d ty ctx expr
+
+  let check_err (d : string) (chk : exn -> bool)
+      ((w, ctx, expr, ty) : what * Typecheck.context * string * string) =
+    match w with
+    | Check ->
+        Alcotest.match_raises d chk (fun () -> check_typecheck d ctx expr ty)
+    | Infer -> Alcotest.match_raises d chk (fun () -> check_infer d ty ctx expr)
+    | Both ->
+        Alcotest.match_raises d chk (fun () -> check_typecheck d ctx expr ty);
+        Alcotest.match_raises d chk (fun () -> check_infer d ty ctx expr)
+
+  let ( |- ) = in_context
+  let ( <= ) = check_with
+  let ( => ) = infer_with
+  let ( <=> ) = both_with
+end
+
+include Make (struct
   let ambiguous e = raise e
+  let exception_type = None
 end)
-
-let typecheck (ctx : Typecheck.context) (expr : string) (ty : string) =
-  let ctx' = ctx in
-  let expr' = parse_string_expr expr in
-  let ty' = parse_string_typeT ty in
-  EmptyTypecheck.typecheck ctx' expr' ty'
-
-let typecheck' = typecheck []
-let check_typecheck (_ : string) = typecheck
-let check_typecheck' (_ : string) = typecheck'
-
-let infer (ctx : Typecheck.context) (expr : string) =
-  let ctx' = ctx in
-  let expr' = parse_string_expr expr in
-  EmptyTypecheck.infer ctx' expr'
-
-let infer' = infer []
-
-let check_infer (d : string) (ty : string) (ctx : Typecheck.context)
-    (expr : string) =
-  let ty' = parse_string_typeT ty in
-  Alcotest.check typeT d ty' (infer ctx expr)
-
-let check_infer' (d : string) (ty : string) (expr : string) =
-  let ty' = parse_string_typeT ty in
-  Alcotest.check typeT d ty' (infer [] expr)
-
-type what = Check | Infer | Both
-
-let o : Typecheck.context = []
-let in_context (ctx : Typecheck.context) (expr : string) = (ctx, expr)
-
-let check_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
-  (Check, ctx, expr, ty)
-
-let infer_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
-  (Infer, ctx, expr, ty)
-
-let both_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
-  (Both, ctx, expr, ty)
-
-let check (d : string)
-    ((w, ctx, expr, ty) : what * Typecheck.context * string * string) =
-  match w with
-  | Check -> check_typecheck d ctx expr ty
-  | Infer -> check_infer d ty ctx expr
-  | Both ->
-      check_typecheck d ctx expr ty;
-      check_infer d ty ctx expr
-
-let check_err (d : string) (chk : exn -> bool)
-    ((w, ctx, expr, ty) : what * Typecheck.context * string * string) =
-  match w with
-  | Check ->
-      Alcotest.match_raises d chk (fun () -> check_typecheck d ctx expr ty)
-  | Infer -> Alcotest.match_raises d chk (fun () -> check_infer d ty ctx expr)
-  | Both ->
-      Alcotest.match_raises d chk (fun () -> check_typecheck d ctx expr ty);
-      Alcotest.match_raises d chk (fun () -> check_infer d ty ctx expr)
-
-let ( |- ) = in_context
-let ( <= ) = check_with
-let ( => ) = infer_with
-let ( <=> ) = both_with
 
 module E = struct
   let common (e : exn) = match e with Typecheck.TyExn _ -> false | _ -> true
