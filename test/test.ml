@@ -314,6 +314,24 @@ let test_errors () =
   test "{Bool, Unit, Nat}" "{not (true), unit, {0, true}.1}"
     Stella.AbsStella.(TypeTuple [ TypeBool; TypeUnit; TypeNat ])
 
+let test_subtyping () =
+  let open Make (struct
+    let ambiguous = raise
+    let exception_type = None
+    let is_subtyping = true
+    let eq = Stella.Typecheck.subtype
+  end) in
+  check "true <=> Bool" (o |- "true" <=> "Bool");
+  check "false <=> Bool" (o |- "false" <=> "Bool");
+  check "0 <=> Nat" (o |- "0" <=> "Nat");
+  check "unit <=> Unit" (o |- "unit" <=> "Unit");
+
+  check_err "true <= Nat" E.unexpected_type_for_expression (o |- "true" <= "Nat");
+  check_err "false <= Nat" E.unexpected_type_for_expression
+    (o |- "false" <= "Nat");
+  check_err "0 <= Bool" E.unexpected_type_for_expression (o |- "0" <= "Nat");
+  check_err "0 <= Unit" E.unexpected_type_for_expression (o |- "0" <= "Unit")
+
 let () =
   Alcotest.run "Typecheck"
     [
@@ -335,5 +353,6 @@ let () =
           Alcotest.test_case "References" `Quick test_ref;
           Alcotest.test_case "Panics" `Quick test_panic;
           Alcotest.test_case "Errors" `Quick test_errors;
+          Alcotest.test_case "Subtyping" `Quick test_subtyping;
         ] );
     ]
