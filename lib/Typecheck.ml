@@ -224,6 +224,53 @@ let rec eq (ty1 : typeT) (ty2 : typeT) : bool =
 
 let neq (ty1 : typeT) (ty2 : typeT) : bool = eq ty1 ty2 |> not
 
+let rec subtype (ty1 : typeT) (ty2 : typeT) : bool =
+  match (ty1, ty2) with
+  | _, TypeTop -> true
+  | TypeBottom, _ -> true
+  | TypeFun (tyArgs1, tyRet1), TypeFun (tyArgs2, tyRet2) ->
+      List.compare_lengths tyArgs1 tyArgs2 = 0
+      && List.for_all2 subtype tyArgs1 tyArgs2
+      && subtype tyRet2 tyRet1
+  | TypeSum (ty11, ty12), TypeSum (ty21, ty22) ->
+      subtype ty11 ty21 && subtype ty12 ty22
+  | TypeRecord fields1, TypeRecord fields2 ->
+      let fields' =
+        List.map
+          (fun (ARecordFieldType (StellaIdent name, ty)) -> (name, ty))
+          fields1
+      in
+      List.compare_lengths fields1 fields2 >= 0
+      && List.for_all
+           (fun (ARecordFieldType (StellaIdent name, ty)) ->
+             match List.assoc_opt name fields' with
+             | Some ty' -> subtype ty' ty
+             | _ -> false)
+           fields2
+  | TypeVariant fields1, TypeVariant fields2 ->
+      let fields' =
+        List.map
+          (fun (AVariantFieldType (StellaIdent name, typing)) -> (name, typing))
+          fields2
+      in
+      List.compare_lengths fields1 fields2 <= 0
+      && List.for_all
+           (fun (AVariantFieldType (StellaIdent name, typing)) ->
+             match List.assoc_opt name fields' with
+             | Some typing' -> (
+                 match (typing', typing) with
+                 | SomeTyping ty', SomeTyping ty -> eq ty' ty
+                 | NoTyping, NoTyping -> true
+                 | _ -> false)
+             | None -> false)
+           fields1
+  | TypeList ty1, TypeList ty2 -> subtype ty1 ty2
+  | TypeBool, TypeBool -> true
+  | TypeNat, TypeNat -> true
+  | TypeUnit, TypeUnit -> true
+  | TypeRef ty1, TypeRef ty2 -> subtype ty1 ty2 && subtype ty2 ty1
+  | _ -> false
+
 let check_main (ctx : context) : unit =
   match get ctx "main" with None -> raise (TyExn MissingMain) | _ -> ()
 
@@ -554,9 +601,13 @@ let put_params (ctx : context) (params : paramDecl list) : context =
 module type Context = sig
   val ambiguous : exn -> typeT
   val exception_type : typeT option
+  val is_subtyping : bool
+  val eq : typeT -> typeT -> bool
 end
 
 module Typecheck (Ctx : Context) = struct
+  let neq (ty1 : typeT) (ty2 : typeT) : bool = Ctx.eq ty1 ty2 |> not
+
   let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
     (* print_endline
     ("Checking expr "
@@ -619,7 +670,7 @@ module Typecheck (Ctx : Context) = struct
     | NotEqual _, _ ->
         raise (TyExn (UnexpectedTypeForExpression (ty, TypeBool, expr)))
     | TypeAsc (e1, ty'), _ ->
-        if neq ty ty' then
+        if neq ty' ty then
           raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
         else (
           check_type ty';
@@ -627,16 +678,14 @@ module Typecheck (Ctx : Context) = struct
     | Abstraction (params, expr'), TypeFun (tyParams, tyReturn) ->
         (* Check arity *)
         (* List.compare_lengths tyParams params = 0 *)
-        List.fold_left
-          (fun _ (ty1, AParamDecl (ident, ty2)) ->
-            if neq ty1 ty2 then
+        List.iter2
+          (fun ty (AParamDecl (ident, ty')) ->
+            if neq ty' ty then
               raise
                 (TyExn
-                   (UnexpectedTypeForParameter
-                      (ty1, ty2, AParamDecl (ident, ty2))))
+                   (UnexpectedTypeForParameter (ty, ty', AParamDecl (ident, ty))))
             else ())
-          ()
-          (List.combine tyParams params);
+          tyParams params;
         let ctx' = put_params ctx params in
         check_type tyReturn;
         typecheck ctx' expr' tyReturn
@@ -873,7 +922,7 @@ module Typecheck (Ctx : Context) = struct
         match get ctx name with
         | None -> raise (TyExn (UndefinedVariable (name, expr)))
         | Some ty' ->
-            if neq ty ty' then
+            if neq ty' ty then
               raise (TyExn (UnexpectedTypeForExpression (ty, ty', expr)))
             else ())
     | a, _ ->
@@ -938,7 +987,17 @@ module Typecheck (Ctx : Context) = struct
         let ctx' = put_params ctx params in
         let tyReturn = infer ctx' expr' in
         TypeFun (List.map (fun (AParamDecl (_, ty)) -> ty) params, tyReturn)
-    | Variant _ -> raise (TyExn (AmbiguousVariantType expr))
+    | Variant (ident, data) ->
+        if Ctx.is_subtyping then
+          TypeVariant
+            [
+              AVariantFieldType
+                ( ident,
+                  match data with
+                  | SomeExprData data' -> SomeTyping (infer ctx data')
+                  | NoExprData -> NoTyping );
+            ]
+        else raise (TyExn (AmbiguousVariantType expr))
     | Match (_, []) -> raise (TyExn (IllegalEmptyMatching expr))
     | Match (expr', AMatchCase (pat, expr'') :: cases) ->
         let ty' = infer ctx expr' in
@@ -1103,7 +1162,7 @@ module Typecheck (Ctx : Context) = struct
         let ty = infer ctx expr' in
         match ty with
         | TypeFun ([ tyArg ], tyRet) ->
-            if neq tyArg tyRet then
+            if neq tyArg tyRet || neq tyRet tyArg then
               raise
                 (TyExn
                    (UnexpectedTypeForExpression
@@ -1150,9 +1209,13 @@ let typecheckProgram (program : program) =
             match decl with DeclExceptionType ty -> Some ty | _ -> None)
           decls
       in
+      let is_subtyping = List.mem "#structural-subtyping" extensions' in
+      let eq = if is_subtyping then subtype else eq in
       let module M = Typecheck (struct
         let ambiguous = ambiguous
         let exception_type = exception_type
+        let is_subtyping = is_subtyping
+        let eq = eq
       end) in
       let typecheck = M.typecheck in
       let ctx =
@@ -1170,8 +1233,8 @@ let typecheckProgram (program : program) =
           [] decls
       in
       check_main ctx;
-      List.fold_left
-        (fun _ decl ->
+      List.iter
+        (fun decl ->
           match decl with
           (* TODO: Add decl support *)
           | DeclFun
@@ -1180,4 +1243,4 @@ let typecheckProgram (program : program) =
               check_type tyReturn;
               typecheck ctx' expr tyReturn
           | _ -> not_implemented ())
-        () decls
+        decls
