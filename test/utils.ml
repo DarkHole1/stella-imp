@@ -86,6 +86,8 @@ end
 include Make (struct
   let ambiguous e = raise e
   let exception_type = None
+  let is_subtyping = false
+  let eq = Typecheck.eq
 end)
 
 module E = struct

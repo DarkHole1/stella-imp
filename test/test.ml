@@ -276,6 +276,8 @@ let test_errors () =
     let open Make (struct
       let ambiguous = raise
       let exception_type = Some ty
+      let is_subtyping = false
+      let eq = Stella.Typecheck.eq
     end) in
     check
       ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") <= Nat")
