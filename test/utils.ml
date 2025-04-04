@@ -16,7 +16,7 @@ let parse_string_typeT (s : string) =
   Lexing.from_string s |> ParStella.pTypeT LexStella.token
 
 module Make (Ctx : Typecheck.Context) = struct
-  module TC = Typecheck.Typecheck (Ctx)
+  module TC = Typecheck.Make (Ctx)
 
   let typecheck (ctx : Typecheck.context) (expr : string) (ty : string) =
     let ctx' = ctx in

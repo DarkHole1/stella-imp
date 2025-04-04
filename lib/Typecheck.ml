@@ -605,7 +605,7 @@ module type Context = sig
   val eq : typeT -> typeT -> bool
 end
 
-module Typecheck (Ctx : Context) = struct
+module Make (Ctx : Context) = struct
   let neq (ty1 : typeT) (ty2 : typeT) : bool = Ctx.eq ty1 ty2 |> not
 
   let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
@@ -1211,7 +1211,7 @@ let typecheckProgram (program : program) =
       in
       let is_subtyping = List.mem "#structural-subtyping" extensions' in
       let eq = if is_subtyping then subtype else eq in
-      let module M = Typecheck (struct
+      let module M = Make (struct
         let ambiguous = ambiguous
         let exception_type = exception_type
         let is_subtyping = is_subtyping
