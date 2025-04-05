@@ -324,10 +324,27 @@ let test_subtyping () =
   check "unit <=> Unit" (o |- "unit" <=> "Unit");
 
   check_err "true <= Nat" E.common (o |- "true" <= "Nat");
-  check_err "false <= Nat" E.common
-    (o |- "false" <= "Nat");
+  check_err "false <= Nat" E.common (o |- "false" <= "Nat");
   check_err "0 <= Bool" E.common (o |- "0" <= "Bool");
-  check_err "0 <= Unit" E.common (o |- "0" <= "Unit")
+  check_err "0 <= Unit" E.common (o |- "0" <= "Unit");
+
+  check "{ a = 0, b = false, c = unit } <= { a : Nat }"
+    (o |- "{ a = 0, b = false, c = unit }" <= "{ a : Nat }");
+  check "{ a = 0, b = false, c = unit } <= { b : Bool }"
+    (o |- "{ a = 0, b = false, c = unit }" <= "{ b : Bool }");
+  check "{ a = 0, b = false, c = unit } <= { c : Unit }"
+    (o |- "{ a = 0, b = false, c = unit }" <= "{ c : Unit }");
+  check "{ a = 0, b = false, c = unit } <= { b : Bool, a : Nat }"
+    (o |- "{ a = 0, b = false, c = unit }" <= "{ b : Bool, a : Nat }");
+  check "{ a = 0, b = false, c = unit } <= { c : Unit, a : Nat }"
+    (o |- "{ a = 0, b = false, c = unit }" <= "{ c : Unit, a : Nat }");
+  check "{ a = 0, b = false, c = unit } <= { b : Bool, a : Nat }"
+    (o |- "{ a = 0, b = false, c = unit }" <= "{ b : Bool, a : Nat }");
+  check
+    "{ a = 0, b = false, c = unit } as { a : Nat, b : Bool, c : Unit } <= { c \
+     : Unit, a : Nat, b : Bool }"
+    (o |- "{ a = 0, b = false, c = unit } as { a : Nat, b : Bool, c : Unit }"
+   <= "{ c : Unit, a : Nat, b : Bool }")
 
 let () =
   Alcotest.run "Typecheck"
