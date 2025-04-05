@@ -344,7 +344,14 @@ let test_subtyping () =
     "{ a = 0, b = false, c = unit } as { a : Nat, b : Bool, c : Unit } <= { c \
      : Unit, a : Nat, b : Bool }"
     (o |- "{ a = 0, b = false, c = unit } as { a : Nat, b : Bool, c : Unit }"
-   <= "{ c : Unit, a : Nat, b : Bool }")
+   <= "{ c : Unit, a : Nat, b : Bool }");
+
+  check "0 <= Top" (o |- "0" <= "Top");
+  check "unit <= Top" (o |- "unit" <= "Top");
+  check "true <= Top" (o |- "true" <= "Top");
+  check "{0, true} <= Top" (o |- "{0, true}" <= "Top");
+
+  check "x <= Nat" ([ ("x", "Bot") ] |- "x" <= "Nat")
 
 let () =
   Alcotest.run "Typecheck"

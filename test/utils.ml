@@ -67,37 +67,41 @@ module Make (Ctx : Context) = struct
     Alcotest.check typeT d ty' (infer [] expr)
 
   type what = Check | Infer | Both
+  type context = (string * string) list
 
-  let o : Typecheck.context = []
-  let in_context (ctx : Typecheck.context) (expr : string) = (ctx, expr)
+  let o : context = []
+  let in_context (ctx : context) (expr : string) = (ctx, expr)
 
-  let check_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
+  let check_with ((ctx, expr) : context * string) (ty : string) =
     (Check, ctx, expr, ty)
 
-  let infer_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
+  let infer_with ((ctx, expr) : context * string) (ty : string) =
     (Infer, ctx, expr, ty)
 
-  let both_with ((ctx, expr) : Typecheck.context * string) (ty : string) =
+  let both_with ((ctx, expr) : context * string) (ty : string) =
     (Both, ctx, expr, ty)
 
-  let check (d : string)
-      ((w, ctx, expr, ty) : what * Typecheck.context * string * string) =
+  let check (d : string) ((w, ctx, expr, ty) : what * context * string * string)
+      =
+    let ctx' = List.map (fun (n, ty) -> (n, parse_string_typeT ty)) ctx in
     match w with
-    | Check -> check_typecheck d ctx expr ty
-    | Infer -> check_infer d ty ctx expr
+    | Check -> check_typecheck d ctx' expr ty
+    | Infer -> check_infer d ty ctx' expr
     | Both ->
-        check_typecheck d ctx expr ty;
-        check_infer d ty ctx expr
+        check_typecheck d ctx' expr ty;
+        check_infer d ty ctx' expr
 
   let check_err (d : string) (chk : exn -> bool)
-      ((w, ctx, expr, ty) : what * Typecheck.context * string * string) =
+      ((w, ctx, expr, ty) : what * context * string * string) =
+    let ctx' = List.map (fun (n, ty) -> (n, parse_string_typeT ty)) ctx in
     match w with
     | Check ->
-        Alcotest.match_raises d chk (fun () -> check_typecheck d ctx expr ty)
-    | Infer -> Alcotest.match_raises d chk (fun () -> check_infer d ty ctx expr)
+        Alcotest.match_raises d chk (fun () -> check_typecheck d ctx' expr ty)
+    | Infer ->
+        Alcotest.match_raises d chk (fun () -> check_infer d ty ctx' expr)
     | Both ->
-        Alcotest.match_raises d chk (fun () -> check_typecheck d ctx expr ty);
-        Alcotest.match_raises d chk (fun () -> check_infer d ty ctx expr)
+        Alcotest.match_raises d chk (fun () -> check_typecheck d ctx' expr ty);
+        Alcotest.match_raises d chk (fun () -> check_infer d ty ctx' expr)
 
   let ( |- ) = in_context
   let ( <= ) = check_with
