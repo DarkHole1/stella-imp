@@ -346,12 +346,24 @@ let test_subtyping () =
     (o |- "{ a = 0, b = false, c = unit } as { a : Nat, b : Bool, c : Unit }"
    <= "{ c : Unit, a : Nat, b : Bool }");
 
+  check "<| a = 0 |> as <| a : Nat |> <= <| a : Nat, b : Unit |>"
+    (o |- "<| a = 0 |> as <| a : Nat |>" <= "<| a : Nat, b : Unit |>");
+  check "<| b = unit |> as <| b : Unit |> <= <| a : Nat, b : Unit |>"
+    (o |- "<| b = unit |> as <| b : Unit |>" <= "<| a : Nat, b : Unit |>");
+  check "x <= <| a : { a : Nat }, b : Unit |>"
+    ([ ("x", "<| a : { a : Nat, b : Bool } |>") ]
+    |- "x" <= "<| a : { a : Nat }, b : Unit |>");
+
   check "0 <= Top" (o |- "0" <= "Top");
   check "unit <= Top" (o |- "unit" <= "Top");
   check "true <= Top" (o |- "true" <= "Top");
   check "{0, true} <= Top" (o |- "{0, true}" <= "Top");
 
-  check "x <= Nat" ([ ("x", "Bot") ] |- "x" <= "Nat")
+  check "x <= Nat" ([ ("x", "Bot") ] |- "x" <= "Nat");
+  check "x <= Bool" ([ ("x", "Bot") ] |- "x" <= "Bool");
+  check "x <= Unit" ([ ("x", "Bot") ] |- "x" <= "Unit");
+  check "x <= {a : Nat}" ([ ("x", "Bot") ] |- "x" <= "{a : Nat}");
+  check "x <= {Bool, Unit}" ([ ("x", "Bot") ] |- "x" <= "{Bool, Unit}")
 
 let () =
   Alcotest.run "Typecheck"

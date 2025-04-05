@@ -225,6 +225,11 @@ let rec eq (ty1 : typeT) (ty2 : typeT) : bool =
 let neq (ty1 : typeT) (ty2 : typeT) : bool = eq ty1 ty2 |> not
 
 let rec subtype (ty1 : typeT) (ty2 : typeT) : bool =
+  (* print_endline
+    ("Checking subtype "
+    ^ PrintStella.printTree PrintStella.prtTypeT ty1
+    ^ " with supertype "
+    ^ PrintStella.printTree PrintStella.prtTypeT ty2); *)
   match (ty1, ty2) with
   | _, TypeTop -> true
   | TypeBottom, _ -> true
@@ -255,11 +260,11 @@ let rec subtype (ty1 : typeT) (ty2 : typeT) : bool =
       in
       List.compare_lengths fields1 fields2 <= 0
       && List.for_all
-           (fun (AVariantFieldType (StellaIdent name, typing)) ->
+           (fun (AVariantFieldType (StellaIdent name, typing')) ->
              match List.assoc_opt name fields' with
-             | Some typing' -> (
+             | Some typing -> (
                  match (typing', typing) with
-                 | SomeTyping ty', SomeTyping ty -> eq ty' ty
+                 | SomeTyping ty', SomeTyping ty -> subtype ty' ty
                  | NoTyping, NoTyping -> true
                  | _ -> false)
              | None -> false)
