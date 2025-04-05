@@ -220,6 +220,7 @@ let rec eq (ty1 : typeT) (ty2 : typeT) : bool =
   | TypeNat, TypeNat -> true
   | TypeUnit, TypeUnit -> true
   | TypeRef ty1, TypeRef ty2 -> eq ty1 ty2
+  | TypeBottom, TypeBottom -> true
   | _ -> false
 
 let neq (ty1 : typeT) (ty2 : typeT) : bool = eq ty1 ty2 |> not
@@ -1130,12 +1131,10 @@ module Make (Ctx : Context) = struct
         match ty with
         | TypeFun ([ tyArg ], tyRet) ->
             if neq tyArg tyRet || neq tyRet tyArg then
-              raise
-                (TyExn
-                   (UnexpectedTypeForExpression
-                      ( TypeFun ([ tyArg ], tyArg),
-                        TypeFun ([ tyArg ], tyRet),
-                        expr )))
+              Ctx.unexpected_type
+                (TypeFun ([ tyArg ], tyArg))
+                (TypeFun ([ tyArg ], tyRet))
+                expr
             else tyArg
         | _ -> raise (TyExn (NotAFunction (ty, expr))))
     | NatRec (eN, eZ, eS) ->

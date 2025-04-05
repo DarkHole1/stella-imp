@@ -365,6 +365,19 @@ let test_subtyping () =
   check "x <= {a : Nat}" ([ ("x", "Bot") ] |- "x" <= "{a : Nat}");
   check "x <= {Bool, Unit}" ([ ("x", "Bot") ] |- "x" <= "{Bool, Unit}")
 
+let test_ambiguous_as_bottom () =
+  let open Make (struct
+    let structural_subtyping = true
+    let ambiguous_types_as_bottom = true
+    let exception_type = Some "Unit"
+  end) in
+  check "inl (true) => Bool + Bot" (o |- "inl (true)" => "Bool + Bot");
+  check "inr (true) => Bot + Bool" (o |- "inr (true)" => "Bot + Bool");
+  check "[] => [Bot]" (o |- "[]" => "[Bot]");
+  check "panic! => Bot" (o |- "panic!" => "Bot");
+  check "throw (unit) => Bot" (o |- "throw (unit)" => "Bot");
+  check "<0x00> => & Bot" (o |- "<0x00>" => "& Bot")
+
 let () =
   Alcotest.run "Typecheck"
     [
@@ -387,5 +400,7 @@ let () =
           Alcotest.test_case "Panics" `Quick test_panic;
           Alcotest.test_case "Errors" `Quick test_errors;
           Alcotest.test_case "Subtyping" `Quick test_subtyping;
+          Alcotest.test_case "Ambiguous as bottom" `Quick
+            test_ambiguous_as_bottom;
         ] );
     ]
