@@ -272,65 +272,62 @@ let test_panic () =
   check_err "panic! => Bool" E.common (o |- "panic!" => "Bool")
 
 let test_errors () =
-  let test tyn tyv ty =
+  let test ty tyv =
     let open Make (struct
-      let ambiguous = raise
+      let structural_subtyping = false
+      let ambiguous_types_as_bottom = false
       let exception_type = Some ty
-      let is_subtyping = false
-      let eq = Stella.Typecheck.eq
     end) in
     check
-      ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") <= Nat")
+      ("(" ^ ty ^ ") throw (" ^ tyv ^ ") <= Nat")
       (o |- "throw (" ^ tyv ^ ")" <= "Nat");
     check
-      ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") <= Bool")
+      ("(" ^ ty ^ ") throw (" ^ tyv ^ ") <= Bool")
       (o |- "throw (" ^ tyv ^ ")" <= "Bool");
     check
-      ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") <= {a : {Bool, Nat}}")
+      ("(" ^ ty ^ ") throw (" ^ tyv ^ ") <= {a : {Bool, Nat}}")
       (o |- "throw (" ^ tyv ^ ")" <= "{a : {Bool, Nat}}");
 
     check_err
-      ("(" ^ tyn ^ ") throw (" ^ tyv ^ ") => Nat")
+      ("(" ^ ty ^ ") throw (" ^ tyv ^ ") => Nat")
       E.common
       (o |- "throw (" ^ tyv ^ ")" => "Nat");
 
     check
-      ("(" ^ tyn ^ ") try { 0 } with { 0 } <=> Nat")
+      ("(" ^ ty ^ ") try { 0 } with { 0 } <=> Nat")
       (o |- "try { 0 } with { 0 }" <=> "Nat");
     check
-      ("(" ^ tyn ^ ") try { true } with { false } <=> Bool")
+      ("(" ^ ty ^ ") try { true } with { false } <=> Bool")
       (o |- "try { true } with { false }" <=> "Bool");
     check
-      ("(" ^ tyn ^ ") try { throw(" ^ tyv ^ ") } with { false } <= Bool")
+      ("(" ^ ty ^ ") try { throw(" ^ tyv ^ ") } with { false } <= Bool")
       (o |- "try { throw(" ^ tyv ^ ") } with { false }" <= "Bool");
     check
-      ("(" ^ tyn ^ ") try { throw(" ^ tyv ^ ") } catch { _ => false } <= Bool")
+      ("(" ^ ty ^ ") try { throw(" ^ tyv ^ ") } catch { _ => false } <= Bool")
       (o |- "try { throw(" ^ tyv ^ ") } catch { _ => false }" <= "Bool")
   in
-  test "Nat" "0" Stella.AbsStella.TypeNat;
-  test "Nat" "succ(0)" Stella.AbsStella.TypeNat;
-  test "Nat" "Nat::pred(0)" Stella.AbsStella.TypeNat;
-  test "Bool" "true" Stella.AbsStella.TypeBool;
+  test "Nat" "0";
+  test "Nat" "succ(0)";
+  test "Nat" "Nat::pred(0)";
+  test "Bool" "true";
   test "{Bool, Unit, Nat}" "{not (true), unit, {0, true}.1}"
-    Stella.AbsStella.(TypeTuple [ TypeBool; TypeUnit; TypeNat ])
 
 let test_subtyping () =
   let open Make (struct
-    let ambiguous = raise
+    let structural_subtyping = true
+    let ambiguous_types_as_bottom = false
     let exception_type = None
-    let is_subtyping = true
-    let eq = Stella.Typecheck.subtype
   end) in
   check "true <=> Bool" (o |- "true" <=> "Bool");
   check "false <=> Bool" (o |- "false" <=> "Bool");
   check "0 <=> Nat" (o |- "0" <=> "Nat");
   check "unit <=> Unit" (o |- "unit" <=> "Unit");
 
-  check_err "true <= Nat" E.unexpected_type_for_expression (o |- "true" <= "Nat");
-  check_err "false <= Nat" E.unexpected_type_for_expression
+  check_err "true <= Nat" E.common (o |- "true" <= "Nat");
+  check_err "false <= Nat" E.common
     (o |- "false" <= "Nat");
-  check_err "0 <= Bool" E.unexpected_type_for_expression (o |- "0" <= "Nat");
-  check_err "0 <= Unit" E.unexpected_type_for_expression (o |- "0" <= "Unit")
+  check_err "0 <= Bool" E.common (o |- "0" <= "Bool");
+  check_err "0 <= Unit" E.common (o |- "0" <= "Unit")
 
 let () =
   Alcotest.run "Typecheck"

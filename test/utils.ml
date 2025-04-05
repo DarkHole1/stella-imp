@@ -15,8 +15,30 @@ let parse_string_expr (s : string) =
 let parse_string_typeT (s : string) =
   Lexing.from_string s |> ParStella.pTypeT LexStella.token
 
-module Make (Ctx : Typecheck.Context) = struct
-  module TC = Typecheck.Make (Ctx)
+module type Context = sig
+  val structural_subtyping : bool
+  val ambiguous_types_as_bottom : bool
+  val exception_type : string option
+end
+
+module Make (Ctx : Context) = struct
+  module TC = Typecheck.Make (struct
+    let ambiguous =
+      if Ctx.ambiguous_types_as_bottom then fun _ -> parse_string_typeT "Bot"
+      else fun e -> raise e
+
+    let exception_type = Option.map parse_string_typeT Ctx.exception_type
+    let is_subtyping = Ctx.structural_subtyping
+
+    let eq =
+      if Ctx.structural_subtyping then Typecheck.subtype else Typecheck.eq
+
+    let unexpected_type =
+      if Ctx.structural_subtyping then fun ty1 ty2 expr ->
+        raise (Typecheck.TyExn (UnexpectedSubtype (ty1, ty2, expr)))
+      else fun ty1 ty2 expr ->
+        raise (Typecheck.TyExn (UnexpectedTypeForExpression (ty1, ty2, expr)))
+  end)
 
   let typecheck (ctx : Typecheck.context) (expr : string) (ty : string) =
     let ctx' = ctx in
@@ -84,10 +106,9 @@ module Make (Ctx : Typecheck.Context) = struct
 end
 
 include Make (struct
-  let ambiguous e = raise e
+  let structural_subtyping = false
+  let ambiguous_types_as_bottom = false
   let exception_type = None
-  let is_subtyping = false
-  let eq = Typecheck.eq
 end)
 
 module E = struct
