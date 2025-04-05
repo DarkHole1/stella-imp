@@ -28,6 +28,7 @@ and decl =
   | DeclTypeAlias of stellaIdent * typeT
   | DeclExceptionType of typeT
   | DeclExceptionVariant of stellaIdent * typeT
+[@@deriving show]
 
 and localDecl = ALocalDecl of decl
 and annotation = InlineAnnotation

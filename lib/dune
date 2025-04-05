@@ -1,5 +1,7 @@
 (library
- (name stella))
+ (name stella)
+ (preprocess
+  (pps ppx_deriving.show)))
 
 (env
  (dev

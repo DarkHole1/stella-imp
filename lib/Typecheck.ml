@@ -37,8 +37,10 @@ type tyError =
   | NotAReference of typeT * expr
   | UnexpectedMemoryAddress of typeT * expr
   | UnexpectedSubtype of typeT * typeT * expr
+[@@deriving show]
 
 exception TyExn of tyError
+[@@deriving show]
 
 let not_implemented () = raise (Failure "Not implemented")
 

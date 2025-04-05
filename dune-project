@@ -8,4 +8,5 @@
  (name stella)
  (depends
   ocaml
+  ppx_deriving
   (alcotest :with-test)))
