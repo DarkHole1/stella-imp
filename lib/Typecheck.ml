@@ -837,7 +837,7 @@ module Make (Ctx : Context) = struct
           let fieldExpr, missingFields, extraFields =
             convert fields' fieldTypes' ([], [], [])
           in
-          if List.compare_length_with extraFields 0 <> 0 then
+          if List.compare_length_with extraFields 0 <> 0 && not Ctx.is_subtyping then
             raise (TyExn (UnexpectedRecordFields (extraFields, ty, expr)))
           else if List.compare_length_with missingFields 0 <> 0 then
             raise (TyExn (MissingRecordFields (missingFields, ty, expr)))
