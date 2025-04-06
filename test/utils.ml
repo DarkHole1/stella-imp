@@ -116,116 +116,116 @@ include Make (struct
 end)
 
 module E = struct
-  let common (e : exn) = match e with Typecheck.TyExn _ -> false | _ -> true
+  let common (e : exn) = match e with Typecheck.TyExn _ -> true | _ -> false
 
   let missing_main (e : exn) =
-    match e with Typecheck.TyExn MissingMain -> false | _ -> true
+    match e with Typecheck.TyExn MissingMain -> true | _ -> false
 
   let undefined_variable (e : exn) =
-    match e with Typecheck.TyExn (UndefinedVariable _) -> false | _ -> true
+    match e with Typecheck.TyExn (UndefinedVariable _) -> true | _ -> false
 
   let unexpected_type_for_expression (e : exn) =
     match e with
-    | Typecheck.TyExn (UnexpectedTypeForExpression _) -> false
-    | _ -> true
+    | Typecheck.TyExn (UnexpectedTypeForExpression _) -> true
+    | _ -> false
 
   let not_a_function (e : exn) =
-    match e with Typecheck.TyExn (NotAFunction _) -> false | _ -> true
+    match e with Typecheck.TyExn (NotAFunction _) -> true | _ -> false
 
   let not_a_tuple (e : exn) =
-    match e with Typecheck.TyExn (NotATuple _) -> false | _ -> true
+    match e with Typecheck.TyExn (NotATuple _) -> true | _ -> false
 
   let not_a_record (e : exn) =
-    match e with Typecheck.TyExn (NotARecord _) -> false | _ -> true
+    match e with Typecheck.TyExn (NotARecord _) -> true | _ -> false
 
   let not_a_list (e : exn) =
-    match e with Typecheck.TyExn (NotAList _) -> false | _ -> true
+    match e with Typecheck.TyExn (NotAList _) -> true | _ -> false
 
   let unexpected_lambda (e : exn) =
-    match e with Typecheck.TyExn (UnexpectedLambda _) -> false | _ -> true
+    match e with Typecheck.TyExn (UnexpectedLambda _) -> true | _ -> false
 
   let unexpected_type_for_parameter (e : exn) =
     match e with
-    | Typecheck.TyExn (UnexpectedTypeForParameter _) -> false
-    | _ -> true
+    | Typecheck.TyExn (UnexpectedTypeForParameter _) -> true
+    | _ -> false
 
   let unexpected_tuple (e : exn) =
-    match e with Typecheck.TyExn (UnexpectedTuple _) -> false | _ -> true
+    match e with Typecheck.TyExn (UnexpectedTuple _) -> true | _ -> false
 
   let unexpected_record (e : exn) =
-    match e with Typecheck.TyExn (UnexpectedRecord _) -> false | _ -> true
+    match e with Typecheck.TyExn (UnexpectedRecord _) -> true | _ -> false
 
   let unexpected_variant (e : exn) =
-    match e with Typecheck.TyExn (UnexpectedVariant _) -> false | _ -> true
+    match e with Typecheck.TyExn (UnexpectedVariant _) -> true | _ -> false
 
   let unexpected_list (e : exn) =
-    match e with Typecheck.TyExn (UnexpectedList _) -> false | _ -> true
+    match e with Typecheck.TyExn (UnexpectedList _) -> true | _ -> false
 
   let unexpected_injection (e : exn) =
-    match e with Typecheck.TyExn (UnexpectedInjection _) -> false | _ -> true
+    match e with Typecheck.TyExn (UnexpectedInjection _) -> true | _ -> false
 
   let missing_record_fields (e : exn) =
-    match e with Typecheck.TyExn (MissingRecordFields _) -> false | _ -> true
+    match e with Typecheck.TyExn (MissingRecordFields _) -> true | _ -> false
 
   let unexpected_record_fields (e : exn) =
     match e with
-    | Typecheck.TyExn (UnexpectedRecordFields _) -> false
-    | _ -> true
+    | Typecheck.TyExn (UnexpectedRecordFields _) -> true
+    | _ -> false
 
   let unexpected_field_access (e : exn) =
     match e with
-    | Typecheck.TyExn (UnexpectedFieldAccess _) -> false
-    | _ -> true
+    | Typecheck.TyExn (UnexpectedFieldAccess _) -> true
+    | _ -> false
 
   let unexpected_variant_label (e : exn) =
     match e with
-    | Typecheck.TyExn (UnexpectedVariantLabel _) -> false
-    | _ -> true
+    | Typecheck.TyExn (UnexpectedVariantLabel _) -> true
+    | _ -> false
 
   let tuple_index_out_of_bounds (e : exn) =
     match e with
-    | Typecheck.TyExn (TupleIndexOutOfBounds _) -> false
-    | _ -> true
+    | Typecheck.TyExn (TupleIndexOutOfBounds _) -> true
+    | _ -> false
 
   let unexpected_tuple_length (e : exn) =
     match e with
-    | Typecheck.TyExn (UnexpectedTupleLength _) -> false
-    | _ -> true
+    | Typecheck.TyExn (UnexpectedTupleLength _) -> true
+    | _ -> false
 
   let ambiguous_sum_type (e : exn) =
-    match e with Typecheck.TyExn (AmbiguousSumType _) -> false | _ -> true
+    match e with Typecheck.TyExn (AmbiguousSumType _) -> true | _ -> false
 
   let ambiguous_variant_type (e : exn) =
-    match e with Typecheck.TyExn (AmbiguousVariantType _) -> false | _ -> true
+    match e with Typecheck.TyExn (AmbiguousVariantType _) -> true | _ -> false
 
   let ambiguous_list (e : exn) =
-    match e with Typecheck.TyExn (AmbiguousList _) -> false | _ -> true
+    match e with Typecheck.TyExn (AmbiguousList _) -> true | _ -> false
 
   let illegal_empty_matching (e : exn) =
-    match e with Typecheck.TyExn (IllegalEmptyMatching _) -> false | _ -> true
+    match e with Typecheck.TyExn (IllegalEmptyMatching _) -> true | _ -> false
 
   let nonexhaustive_match_patterns (e : exn) =
     match e with
-    | Typecheck.TyExn (NonexhaustiveMatchPatterns _) -> false
-    | _ -> true
+    | Typecheck.TyExn (NonexhaustiveMatchPatterns _) -> true
+    | _ -> false
 
   let unexpected_pattern_for_type (e : exn) =
     match e with
-    | Typecheck.TyExn (UnexpectedPatternForType _) -> false
-    | _ -> true
+    | Typecheck.TyExn (UnexpectedPatternForType _) -> true
+    | _ -> false
 
   let duplicate_record_fields (e : exn) =
     match e with
-    | Typecheck.TyExn (DuplicateRecordFields _) -> false
-    | _ -> true
+    | Typecheck.TyExn (DuplicateRecordFields _) -> true
+    | _ -> false
 
   let duplicate_record_type_fields (e : exn) =
     match e with
-    | Typecheck.TyExn (DuplicateRecordTypeFields _) -> false
-    | _ -> true
+    | Typecheck.TyExn (DuplicateRecordTypeFields _) -> true
+    | _ -> false
 
   let duplicate_variant_type_fields (e : exn) =
     match e with
-    | Typecheck.TyExn (DuplicateVariantTypeFields _) -> false
-    | _ -> true
+    | Typecheck.TyExn (DuplicateVariantTypeFields _) -> true
+    | _ -> false
 end
