@@ -40,7 +40,6 @@ type tyError =
 [@@deriving show]
 
 exception TyExn of tyError
-[@@deriving show]
 
 let not_implemented () = raise (Failure "Not implemented")
 
