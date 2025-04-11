@@ -1171,10 +1171,22 @@ let typecheckProgram (program : program) =
         else fun e -> raise e
       in
       let exception_type =
-        List.find_map
-          (fun decl ->
-            match decl with DeclExceptionType ty -> Some ty | _ -> None)
-          decls
+        if List.mem "#open-variant-exceptions" extensions' then
+          let variants =
+            List.concat_map
+              (function
+                | DeclExceptionVariant (ident, ty) ->
+                    [ AVariantFieldType (ident, SomeTyping ty) ]
+                | _ -> [])
+              decls
+          in
+          if List.compare_length_with variants 0 = 0 then None
+          else Some (TypeVariant variants)
+        else
+          List.find_map
+            (fun decl ->
+              match decl with DeclExceptionType ty -> Some ty | _ -> None)
+            decls
       in
       let is_subtyping = List.mem "#structural-subtyping" extensions' in
       let eq = if is_subtyping then subtype else eq in
