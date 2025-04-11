@@ -1,0 +1,10 @@
+language core;
+
+extend with #exceptions, #open-variant-exceptions, #variants;
+
+exception variant a : Nat
+exception variant b : Bool
+
+fn main(n : Nat) -> Nat {
+  return throw(<| a = n |>)
+}

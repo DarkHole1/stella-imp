@@ -263,7 +263,8 @@ let test_ref () =
     (o |- "(new([unit])) := [false]" <=> "Unit");
 
   check_err "0 := 0 <=> Unit" E.not_a_reference (o |- "0 := 0" <=> "Unit");
-  check_err "true := false <=> Unit" E.not_a_reference (o |- "true := false" <=> "Unit");
+  check_err "true := false <=> Unit" E.not_a_reference
+    (o |- "true := false" <=> "Unit");
   check_err "[unit] := [unit, unit] <=> Unit" E.not_a_reference
     (o |- "[unit] := [unit, unit]" <=> "Unit")
 
@@ -381,6 +382,15 @@ let test_ambiguous_as_bottom () =
   check "throw (unit) => Bot" (o |- "throw (unit)" => "Bot");
   check "<0x00> => & Bot" (o |- "<0x00>" => "& Bot")
 
+let test_variant_exceptions () =
+  let open Make (struct
+    let structural_subtyping = false
+    let ambiguous_types_as_bottom = false
+    let exception_type = Some "<| a : Unit, b : Nat |>"
+  end) in
+  check "throw (<| a = unit |>) <= Unit" (o |- "throw (<| a = unit |>)" <= "Unit");
+  check "throw (<| b = 0 |>) <= Unit" (o |- "throw (<| b = 0 |>)" <= "Unit")
+
 let () =
   Alcotest.run "Typecheck"
     [
@@ -405,5 +415,6 @@ let () =
           Alcotest.test_case "Subtyping" `Quick test_subtyping;
           Alcotest.test_case "Ambiguous as bottom" `Quick
             test_ambiguous_as_bottom;
+          Alcotest.test_case "Variant errors" `Quick test_variant_exceptions;
         ] );
     ]

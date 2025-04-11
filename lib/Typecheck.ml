@@ -41,7 +41,7 @@ type tyError =
 
 exception TyExn of tyError
 
-let not_implemented () = raise (Failure "Not implemented")
+let not_implemented s = raise (Failure ("Not implemented: " ^ s))
 
 let pad_doc (pad_size : int) (d : PrintStella.doc) =
  fun buf i -> d buf (i + pad_size)
@@ -316,7 +316,7 @@ let rec synthesis_by_type (ty : typeT) : expr =
   | TypeRef of typeT
   | TypeVar of stellaIdent
   *)
-  | _ -> not_implemented ()
+  | _ -> not_implemented "synthesis_by_type"
 
 let rec matches (p : pattern) (term : expr) : bool =
   match (p, term) with
@@ -543,7 +543,7 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
   | PatternSucc p', TypeNat -> deconstruct_pattern_binder p' TypeNat
   | PatternSucc _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternVar (StellaIdent name), _ -> [ (name, ty) ]
-  | _, _ -> not_implemented ()
+  | _, _ -> not_implemented "deconstruct_pattern_binder"
 
 let find_dup (xs : string list) =
   let rec find_dup' (xs : string list) (dup : string list) =
@@ -896,7 +896,7 @@ module Make (Ctx : Context) = struct
         )
     | a, _ ->
         print_endline (ShowStella.show (ShowStella.showExpr a));
-        not_implemented ()
+        not_implemented "typecheck"
 
   and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
     match expr with
@@ -1153,7 +1153,7 @@ module Make (Ctx : Context) = struct
         match get ctx name with
         | Some ty -> ty
         | None -> raise (TyExn (UndefinedVariable (name, expr))))
-    | _ -> not_implemented ()
+    | _ -> not_implemented "infer"
 end
 
 let typecheckProgram (program : program) =
@@ -1215,7 +1215,9 @@ let typecheckProgram (program : program) =
                   List.map (fun (AParamDecl (name, tyParam)) -> tyParam) params
                 in
                 put a name (TypeFun (tyParams, tyReturn))
-            | _ -> not_implemented ())
+            | DeclExceptionType _ -> a
+            | DeclExceptionVariant _ -> a
+            | _ -> not_implemented "typecheckProgram")
           [] decls
       in
       check_main ctx;
@@ -1228,5 +1230,7 @@ let typecheckProgram (program : program) =
               let ctx' = put_params ctx params in
               check_type tyReturn;
               typecheck ctx' expr tyReturn
-          | _ -> not_implemented ())
+          | DeclExceptionType _ -> ()
+          | DeclExceptionVariant _ -> ()
+          | _ -> not_implemented "typecheckProgram")
         decls
