@@ -228,4 +228,31 @@ module E = struct
     match e with
     | Typecheck.TyExn (DuplicateVariantTypeFields _) -> true
     | _ -> false
+
+  let exception_type_not_declared (e : exn) =
+    match e with
+    | Typecheck.TyExn (ExceptionTypeNotDeclared _) -> true
+    | _ -> false
+
+  let ambiguous_throw_type (e : exn) =
+    match e with Typecheck.TyExn (AmbiguousThrowType _) -> true | _ -> false
+
+  let ambiguous_reference_type (e : exn) =
+    match e with
+    | Typecheck.TyExn (AmbiguousReferenceType _) -> true
+    | _ -> false
+
+  let ambiguous_panic_type (e : exn) =
+    match e with Typecheck.TyExn (AmbiguousPanicType _) -> true | _ -> false
+
+  let not_a_reference (e : exn) =
+    match e with Typecheck.TyExn (NotAReference _) -> true | _ -> false
+
+  let unexpected_memory_address (e : exn) =
+    match e with
+    | Typecheck.TyExn (UnexpectedMemoryAddress _) -> true
+    | _ -> false
+
+  let unexpected_subtype (e : exn) =
+    match e with Typecheck.TyExn (UnexpectedSubtype _) -> true | _ -> false
 end

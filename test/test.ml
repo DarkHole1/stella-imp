@@ -221,9 +221,11 @@ let test_seq () =
   check "unit ; [{0, unit}] <=> [{Nat, Unit}]"
     (o |- "unit ; [{0, unit}]" <=> "[{Nat, Unit}]");
 
-  check_err "true ; 0 <=> Nat" E.common (o |- "true ; 0" <=> "Nat");
-  check_err "0 ; true <=> Bool" E.common (o |- "0 ; true" <=> "Bool");
-  check_err "[unit] ; [{0, unit}] <=> [{Nat, Unit}]" E.common
+  check_err "true ; 0 <=> Nat" E.unexpected_type_for_expression
+    (o |- "true ; 0" <=> "Nat");
+  check_err "0 ; true <=> Bool" E.unexpected_type_for_expression
+    (o |- "0 ; true" <=> "Bool");
+  check_err "[unit] ; [{0, unit}] <=> [{Nat, Unit}]" E.unexpected_list
     (o |- "[unit] ; [{0, unit}]" <=> "[{Nat, Unit}]")
 
 let test_ref () =
@@ -236,32 +238,33 @@ let test_ref () =
   check "<0x00> <= & Bool" (o |- "<0x00>" <= "& Bool");
   check "<0x00> <= & <|l : Bool|>" (o |- "<0x00>" <= "& <|l : Bool|>");
 
-  check_err "<0x00> => & Nat" E.common (o |- "<0x00>" => "& Nat");
+  check_err "<0x00> => & Nat" E.ambiguous_reference_type
+    (o |- "<0x00>" => "& Nat");
 
   check "*(new (0)) <=> Nat" (o |- "*(new (0))" <=> "Nat");
   check "*(new (true)) <=> Bool" (o |- "*(new (true))" <=> "Bool");
   check "*(new ({0, true})) <=> {Nat, Bool}"
     (o |- "*(new ({0, true}))" <=> "{Nat, Bool}");
 
-  check_err "*true <=> Bool" E.common (o |- "*true" <=> "Bool");
-  check_err "*false <=> Bool" E.common (o |- "*false" <=> "Bool");
-  check_err "*0 <=> Nat" E.common (o |- "*0" <=> "Nat");
+  check_err "*true <=> Bool" E.not_a_reference (o |- "*true" <=> "Bool");
+  check_err "*false <=> Bool" E.not_a_reference (o |- "*false" <=> "Bool");
+  check_err "*0 <=> Nat" E.not_a_reference (o |- "*0" <=> "Nat");
 
   check "(new(0)) := 0 <=> Unit" (o |- "(new(0)) := 0" <=> "Unit");
   check "(new(true)) := false <=> Unit" (o |- "(new(true)) := false" <=> "Unit");
   check "(new([unit])) := [unit, unit] <=> Unit"
     (o |- "(new([unit])) := [unit, unit]" <=> "Unit");
 
-  check_err "(new(0)) := [false] <=> Unit" E.common
+  check_err "(new(0)) := [false] <=> Unit" E.unexpected_list
     (o |- "(new(0)) := [false]" <=> "Unit");
-  check_err "(new(true)) := [false] <=> Unit" E.common
+  check_err "(new(true)) := [false] <=> Unit" E.unexpected_list
     (o |- "(new(true)) := [false]" <=> "Unit");
-  check_err "(new([unit])) := [false] <=> Unit" E.common
+  check_err "(new([unit])) := [false] <=> Unit" E.unexpected_type_for_expression
     (o |- "(new([unit])) := [false]" <=> "Unit");
 
-  check_err "0 := 0 <=> Unit" E.common (o |- "0 := 0" <=> "Unit");
-  check_err "true := false <=> Unit" E.common (o |- "true := false" <=> "Unit");
-  check_err "[unit] := [unit, unit] <=> Unit" E.common
+  check_err "0 := 0 <=> Unit" E.not_a_reference (o |- "0 := 0" <=> "Unit");
+  check_err "true := false <=> Unit" E.not_a_reference (o |- "true := false" <=> "Unit");
+  check_err "[unit] := [unit, unit] <=> Unit" E.not_a_reference
     (o |- "[unit] := [unit, unit]" <=> "Unit")
 
 let test_panic () =
@@ -269,7 +272,7 @@ let test_panic () =
   check "panic! <= Nat" (o |- "panic!" <= "Nat");
   check "panic! <= {Bool, Nat}" (o |- "panic!" <= "{Bool, Nat}");
 
-  check_err "panic! => Bool" E.common (o |- "panic!" => "Bool")
+  check_err "panic! => Bool" E.ambiguous_panic_type (o |- "panic!" => "Bool")
 
 let test_errors () =
   let test ty tyv =
@@ -290,7 +293,7 @@ let test_errors () =
 
     check_err
       ("(" ^ ty ^ ") throw (" ^ tyv ^ ") => Nat")
-      E.common
+      E.ambiguous_throw_type
       (o |- "throw (" ^ tyv ^ ")" => "Nat");
 
     check
@@ -323,10 +326,10 @@ let test_subtyping () =
   check "0 <=> Nat" (o |- "0" <=> "Nat");
   check "unit <=> Unit" (o |- "unit" <=> "Unit");
 
-  check_err "true <= Nat" E.common (o |- "true" <= "Nat");
-  check_err "false <= Nat" E.common (o |- "false" <= "Nat");
-  check_err "0 <= Bool" E.common (o |- "0" <= "Bool");
-  check_err "0 <= Unit" E.common (o |- "0" <= "Unit");
+  check_err "true <= Nat" E.unexpected_subtype (o |- "true" <= "Nat");
+  check_err "false <= Nat" E.unexpected_subtype (o |- "false" <= "Nat");
+  check_err "0 <= Bool" E.unexpected_subtype (o |- "0" <= "Bool");
+  check_err "0 <= Unit" E.unexpected_subtype (o |- "0" <= "Unit");
 
   check "{ a = 0, b = false, c = unit } <= { a : Nat }"
     (o |- "{ a = 0, b = false, c = unit }" <= "{ a : Nat }");
