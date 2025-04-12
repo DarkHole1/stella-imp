@@ -388,8 +388,22 @@ let test_variant_exceptions () =
     let ambiguous_types_as_bottom = false
     let exception_type = Some "<| a : Unit, b : Nat |>"
   end) in
-  check "throw (<| a = unit |>) <= Unit" (o |- "throw (<| a = unit |>)" <= "Unit");
+  check "throw (<| a = unit |>) <= Unit"
+    (o |- "throw (<| a = unit |>)" <= "Unit");
   check "throw (<| b = 0 |>) <= Unit" (o |- "throw (<| b = 0 |>)" <= "Unit")
+
+let test_bugs () =
+  let open Make (struct
+    let structural_subtyping = true
+    let ambiguous_types_as_bottom = false
+    let exception_type = Some "Top"
+  end) in
+  check "throw(true) <= Top" (o |- "throw (true)" <= "Top");
+  check "match (0) { x => x } <=> Nat" (o |- "match (0) { x => x }" <=> "Nat");
+  check "match (fn (n : Nat) { return 0 }) { x => 0 } <=> Nat"
+    (o |- "match (fn (n : Nat) { return 0 }) { x => 0 }" <=> "Nat")
+  (* check "*(if Nat::iszero(n) then <0x01> else <0x02>) <= Nat"
+    (o |- "*(if Nat::iszero(n) then <0x01> else <0x02>)" <= "Nat") *)
 
 let () =
   Alcotest.run "Typecheck"
@@ -417,4 +431,5 @@ let () =
             test_ambiguous_as_bottom;
           Alcotest.test_case "Variant errors" `Quick test_variant_exceptions;
         ] );
+      ("bugs", [ Alcotest.test_case "Bugs" `Quick test_bugs ]);
     ]

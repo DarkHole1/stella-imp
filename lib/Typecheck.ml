@@ -470,16 +470,23 @@ let rec next_unmatched (p : pattern) (term : expr) (ty : typeT) : expr option =
   | _ -> None
 
 let check_exhaustivness (ps : pattern list) (ty : typeT) : expr option =
-  let init = synthesis_by_type ty in
-  let rec check_exhaustivness' (term : expr) : expr option =
-    match List.find_opt (fun p -> matches p term) ps with
-    | Some p -> (
-        match next_unmatched p term ty with
-        | Some term' -> check_exhaustivness' term'
-        | None -> None)
-    | None -> Some term
-  in
-  check_exhaustivness' init
+  match ty with
+  (* W/O cast as if it typecheked -> there is wildcard *)
+  | TypeFun _ -> None
+  | TypeTop -> None
+  | TypeBottom -> None
+  | TypeRef _ -> None
+  | _ ->
+      let init = synthesis_by_type ty in
+      let rec check_exhaustivness' (term : expr) : expr option =
+        match List.find_opt (fun p -> matches p term) ps with
+        | Some p -> (
+            match next_unmatched p term ty with
+            | Some term' -> check_exhaustivness' term'
+            | None -> None)
+        | None -> Some term
+      in
+      check_exhaustivness' init
 
 let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
   match (p, ty) with
@@ -623,15 +630,15 @@ module Make (Ctx : Context) = struct
     ^ " with type "
     ^ PrintStella.printTree PrintStella.prtTypeT ty); *)
     match (expr, ty) with
-    | _, TypeTop -> infer ctx expr |> ignore
     | Sequence (e1, e2), _ ->
         typecheck ctx e1 TypeUnit;
         typecheck ctx e2 ty
-    | Assign (e1, e2), TypeUnit -> (
-        match infer ctx e1 with
-        | TypeRef ty' -> typecheck ctx e2 ty'
-        | ty' -> raise (TyExn (NotAReference (ty', e1))))
-    | Assign _, _ -> Ctx.unexpected_type ty TypeUnit expr
+    | Assign (e1, e2), _ -> (
+        if neq TypeUnit ty then Ctx.unexpected_type ty TypeUnit expr
+        else
+          match infer ctx e1 with
+          | TypeRef ty' -> typecheck ctx e2 ty'
+          | ty' -> raise (TyExn (NotAReference (ty', e1))))
     | If (eIf, eThen, eElse), _ ->
         typecheck ctx eIf TypeBool;
         typecheck ctx eThen ty;
@@ -647,30 +654,30 @@ module Make (Ctx : Context) = struct
         let ctx' = List.concat [ bindersCtx; ctx ] in
         typecheck ctx' expr' ty
     (* LetRec TODO *)
-    | LessThan (e1, e2), TypeBool ->
-        typecheck ctx e1 TypeNat;
+    | LessThan (e1, e2), _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | LessThan (e1, e2), _ -> Ctx.unexpected_type ty TypeBool expr
-    | LessThanOrEqual (e1, e2), TypeBool ->
-        typecheck ctx e1 TypeNat;
+    | LessThanOrEqual (e1, e2), _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | LessThanOrEqual (e1, e2), _ -> Ctx.unexpected_type ty TypeBool expr
-    | GreaterThan (e1, e2), TypeBool ->
-        typecheck ctx e1 TypeNat;
+    | GreaterThan (e1, e2), _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | GreaterThan (e1, e2), _ -> Ctx.unexpected_type ty TypeBool expr
-    | GreaterThanOrEqual (e1, e2), TypeBool ->
-        typecheck ctx e1 TypeNat;
+    | GreaterThanOrEqual (e1, e2), _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | GreaterThanOrEqual (e1, e2), _ -> Ctx.unexpected_type ty TypeBool expr
-    | Equal (e1, e2), TypeBool ->
-        typecheck ctx e1 TypeNat;
+    | Equal (e1, e2), _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | Equal _, _ -> Ctx.unexpected_type ty TypeBool expr
-    | NotEqual (e1, e2), TypeBool ->
-        typecheck ctx e1 TypeNat;
+    | NotEqual (e1, e2), _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | NotEqual _, _ -> Ctx.unexpected_type ty TypeBool expr
     | TypeAsc (e1, ty'), _ ->
         if neq ty' ty then Ctx.unexpected_type ty ty' expr
         else (
@@ -690,6 +697,7 @@ module Make (Ctx : Context) = struct
         let ctx' = put_params ctx params in
         check_type tyReturn;
         typecheck ctx' expr' tyReturn
+    | Abstraction _, TypeTop -> infer ctx expr |> ignore
     | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
     | Variant (StellaIdent name, SomeExprData expr'), TypeVariant fieldTypes ->
         (* TODO: No expr data *)
@@ -702,6 +710,7 @@ module Make (Ctx : Context) = struct
         in
         let ty' = find fieldTypes in
         typecheck ctx expr' ty'
+    | Variant _, TypeTop -> infer ctx expr |> ignore
     | Variant _, _ -> raise (TyExn (UnexpectedVariant (ty, expr)))
     | Match (_, []), _ -> raise (TyExn (IllegalEmptyMatching expr))
     | Match (expr', cases), _ -> (
@@ -720,32 +729,35 @@ module Make (Ctx : Context) = struct
         | None -> ())
     | List exprs, TypeList ty' ->
         List.iter (fun expr' -> typecheck ctx expr' ty') exprs
+    | List [], TypeTop -> ()
+    | List _, TypeTop -> infer ctx expr |> ignore
     | List _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
-    | Add (e1, e2), TypeNat ->
-        typecheck ctx e1 TypeNat;
+    | Add (e1, e2), _ ->
+        if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | Add _, _ -> Ctx.unexpected_type ty TypeNat expr
-    | Subtract (e1, e2), TypeNat ->
-        typecheck ctx e1 TypeNat;
+    | Subtract (e1, e2), _ ->
+        if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | Subtract _, _ -> Ctx.unexpected_type ty TypeNat expr
-    | LogicOr (e1, e2), TypeBool ->
-        typecheck ctx e1 TypeBool;
+    | LogicOr (e1, e2), _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx e1 TypeBool;
         typecheck ctx e2 TypeBool
-    | LogicOr _, _ -> Ctx.unexpected_type ty TypeBool expr
-    | Multiply (e1, e2), TypeNat ->
-        typecheck ctx e1 TypeNat;
+    | Multiply (e1, e2), _ ->
+        if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | Multiply _, _ -> Ctx.unexpected_type ty TypeNat expr
-    | Divide (e1, e2), TypeNat ->
-        typecheck ctx e1 TypeNat;
+    | Divide (e1, e2), _ ->
+        if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
+        else typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat
-    | Divide _, _ -> Ctx.unexpected_type ty TypeNat expr
-    | LogicAnd (e1, e2), TypeBool ->
-        typecheck ctx e1 TypeBool;
+    | LogicAnd (e1, e2), _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx e1 TypeBool;
         typecheck ctx e2 TypeBool
-    | LogicAnd _, _ -> Ctx.unexpected_type ty TypeBool expr
     | Ref expr', TypeRef ty' -> typecheck ctx expr' ty'
+    | Ref expr', TypeTop -> typecheck ctx expr' ty
     | Ref _, _ -> Ctx.unexpected_type ty (infer ctx expr) expr
     | Deref _, _ ->
         let ty' = infer ctx expr in
@@ -770,6 +782,7 @@ module Make (Ctx : Context) = struct
             (fun _ (expr, ty) -> typecheck ctx expr ty)
             ()
             (List.combine exprs tyExprs)
+    | Tuple _, TypeTop -> infer ctx expr |> ignore
     | Tuple _, _ -> raise (TyExn (UnexpectedTuple (ty, expr)))
     | Record fields, TypeRecord fieldTypes ->
         let fields' =
@@ -827,6 +840,7 @@ module Make (Ctx : Context) = struct
           else if List.compare_length_with missingFields 0 <> 0 then
             raise (TyExn (MissingRecordFields (missingFields, ty, expr)))
           else List.iter (fun (expr', ty') -> typecheck ctx expr' ty') fieldExpr
+    | Record _, TypeTop -> infer ctx expr |> ignore
     | Record _, _ -> raise (TyExn (UnexpectedRecord (ty, expr)))
     | ConsList (e1, e2), TypeList ty' ->
         typecheck ctx e1 ty';
@@ -861,17 +875,23 @@ module Make (Ctx : Context) = struct
         typecheck ctx e1 ty;
         typecheck ctx e2 ty
     | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
+    | Inl expr', TypeTop -> typecheck ctx expr' TypeTop
     | Inl _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
     | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
+    | Inr expr', TypeTop -> typecheck ctx expr' TypeTop
     | Inr _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
-    | Succ expr', TypeNat -> typecheck ctx expr' TypeNat
-    | Succ _, _ -> Ctx.unexpected_type ty TypeNat expr
-    | LogicNot expr', TypeBool -> typecheck ctx expr' TypeBool
-    | LogicNot _, _ -> Ctx.unexpected_type ty TypeBool expr
-    | Pred expr', TypeNat -> typecheck ctx expr' TypeNat
-    | Pred _, _ -> Ctx.unexpected_type ty TypeNat expr
-    | IsZero expr', TypeBool -> typecheck ctx expr' TypeNat
-    | IsZero _, _ -> Ctx.unexpected_type ty TypeNat expr
+    | Succ expr', _ ->
+        if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
+        else typecheck ctx expr' TypeNat
+    | LogicNot expr', _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx expr' TypeBool
+    | Pred expr', _ ->
+        if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
+        else typecheck ctx expr' TypeNat
+    | IsZero expr', _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
+        else typecheck ctx expr' TypeNat
     | Fix _, _ ->
         let ty' = infer ctx expr in
         if neq ty' ty then Ctx.unexpected_type ty ty' expr
@@ -879,15 +899,16 @@ module Make (Ctx : Context) = struct
         typecheck ctx eN TypeNat;
         typecheck ctx eZ ty;
         typecheck ctx eS (TypeFun ([ TypeNat ], TypeFun ([ ty ], ty)))
-    | ConstTrue, TypeBool -> ()
-    | ConstTrue, _ -> Ctx.unexpected_type ty TypeBool expr
-    | ConstFalse, TypeBool -> ()
-    | ConstFalse, _ -> Ctx.unexpected_type ty TypeBool expr
-    | ConstUnit, TypeUnit -> ()
-    | ConstUnit, _ -> Ctx.unexpected_type ty TypeUnit expr
-    | ConstInt _, TypeNat -> ()
-    | ConstInt _, _ -> Ctx.unexpected_type ty TypeNat expr
+    | ConstTrue, _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr else ()
+    | ConstFalse, _ ->
+        if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr else ()
+    | ConstUnit, _ ->
+        if neq TypeUnit ty then Ctx.unexpected_type ty TypeUnit expr else ()
+    | ConstInt _, _ ->
+        if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr else ()
     | ConstMemory _, TypeRef _ -> ()
+    | ConstMemory _, TypeTop -> ()
     | ConstMemory _, _ -> raise (TyExn (UnexpectedMemoryAddress (ty, expr)))
     | Var (StellaIdent name), _ -> (
         match get ctx name with
@@ -981,7 +1002,11 @@ module Make (Ctx : Context) = struct
             in
             typecheck ctx' expr'' tyRes)
           cases;
-        let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
+        let ps =
+          List.map
+            (fun (AMatchCase (p, _)) -> p)
+            (AMatchCase (pat, expr'') :: cases)
+        in
         (match check_exhaustivness ps ty' with
         | Some expr'' ->
             raise (TyExn (NonexhaustiveMatchPatterns (expr'', expr)))
