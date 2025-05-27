@@ -46,7 +46,7 @@ module Make (Ctx : Context) = struct
     let ty' = parse_string_typeT ty in
     TC.typecheck ctx' expr' ty'
 
-  let typecheck' = typecheck []
+  let typecheck' = typecheck Context.empty
   let check_typecheck (_ : string) = typecheck
   let check_typecheck' (_ : string) = typecheck'
 
@@ -55,7 +55,7 @@ module Make (Ctx : Context) = struct
     let expr' = parse_string_expr expr in
     TC.infer ctx' expr'
 
-  let infer' = infer []
+  let infer' = infer Context.empty
 
   let check_infer (d : string) (ty : string) (ctx : Typecheck.context)
       (expr : string) =
@@ -64,7 +64,7 @@ module Make (Ctx : Context) = struct
 
   let check_infer' (d : string) (ty : string) (expr : string) =
     let ty' = parse_string_typeT ty in
-    Alcotest.check typeT d ty' (infer [] expr)
+    Alcotest.check typeT d ty' (infer Context.empty expr)
 
   type what = Check | Infer | Both
   type context = (string * string) list
@@ -83,7 +83,10 @@ module Make (Ctx : Context) = struct
 
   let check (d : string) ((w, ctx, expr, ty) : what * context * string * string)
       =
-    let ctx' = List.map (fun (n, ty) -> (n, parse_string_typeT ty)) ctx in
+    let ctx' =
+      List.map (fun (n, ty) -> parse_string_typeT ty |> Context.from_var n) ctx
+      |> Context.concat
+    in
     match w with
     | Check -> check_typecheck d ctx' expr ty
     | Infer -> check_infer d ty ctx' expr
@@ -93,7 +96,10 @@ module Make (Ctx : Context) = struct
 
   let check_err (d : string) (chk : exn -> bool)
       ((w, ctx, expr, ty) : what * context * string * string) =
-    let ctx' = List.map (fun (n, ty) -> (n, parse_string_typeT ty)) ctx in
+    let ctx' =
+      List.map (fun (n, ty) -> parse_string_typeT ty |> Context.from_var n) ctx
+      |> Context.concat
+    in
     match w with
     | Check ->
         Alcotest.match_raises d chk (fun () -> check_typecheck d ctx' expr ty)
