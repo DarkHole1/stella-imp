@@ -196,14 +196,7 @@ let show_error (err : tyError) : string =
       "ERROR_UNDEFINED_TYPE_VARIABLE\n  переменная\n    " ^ prtTypeT ty
       ^ "\n  не определена"
 
-type context = (string * typeT) list
-
-let put (ctx : context) (s : string) (ty : typeT) : context = (s, ty) :: ctx
-
-let rec get (ctx : context) (s : string) : typeT option =
-  match ctx with
-  | (s', ty) :: ctx' -> if s = s' then Some ty else get ctx' s
-  | _ -> None
+type context = Context.t
 
 let rec eq (ty1 : typeT) (ty2 : typeT) : bool =
   match (ty1, ty2) with
@@ -296,7 +289,9 @@ let rec subtype (ty1 : typeT) (ty2 : typeT) : bool =
   | _ -> false
 
 let check_main (ctx : context) : unit =
-  match get ctx "main" with None -> raise (TyExn MissingMain) | _ -> ()
+  match Context.get ctx "main" with
+  | None -> raise (TyExn MissingMain)
+  | _ -> ()
 
 let rec synthesis_by_type (ty : typeT) : expr =
   match ty with
@@ -523,7 +518,7 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
       let typing = find fieldTypes in
       match (typing, patternData) with
       | SomeTyping ty', SomePatternData p' -> deconstruct_pattern_binder p' ty'
-      | NoTyping, NoPatternData -> []
+      | NoTyping, NoPatternData -> Context.empty
       | _ -> raise (TyExn (UnexpectedPatternForType (p, ty))))
   | PatternVariant _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternInl p', TypeSum (tyL, _) -> deconstruct_pattern_binder p' tyL
@@ -535,7 +530,8 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
         raise (TyExn (UnexpectedPatternForType (p, ty)))
       else
         List.combine ps types
-        |> List.concat_map (fun (p', ty') -> deconstruct_pattern_binder p' ty')
+        |> List.map (fun (p', ty') -> deconstruct_pattern_binder p' ty')
+        |> Context.concat
   | PatternTuple _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternRecord lps, TypeRecord ftys ->
       (* TODO Check fields *)
@@ -544,29 +540,31 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
           (fun (ARecordFieldType (StellaIdent name, ty)) -> (name, ty))
           ftys
       in
-      List.concat_map
+      List.map
         (fun (ALabelledPattern (StellaIdent name, p')) ->
           List.assoc name types |> deconstruct_pattern_binder p')
         lps
+      |> Context.concat
   | PatternRecord _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternList ps, TypeList ty' ->
-      List.concat_map (fun p' -> deconstruct_pattern_binder p' ty') ps
+      List.map (fun p' -> deconstruct_pattern_binder p' ty') ps
+      |> Context.concat
   | PatternList _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternCons (p1, p2), TypeList ty' ->
-      List.concat
+      Context.concat
         [ deconstruct_pattern_binder p1 ty'; deconstruct_pattern_binder p2 ty ]
   | PatternCons _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
-  | PatternFalse, TypeBool -> []
+  | PatternFalse, TypeBool -> Context.empty
   | PatternFalse, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
-  | PatternTrue, TypeBool -> []
+  | PatternTrue, TypeBool -> Context.empty
   | PatternTrue, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
-  | PatternUnit, TypeUnit -> []
+  | PatternUnit, TypeUnit -> Context.empty
   | PatternUnit, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
-  | PatternInt _, TypeNat -> []
+  | PatternInt _, TypeNat -> Context.empty
   | PatternInt _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
   | PatternSucc p', TypeNat -> deconstruct_pattern_binder p' TypeNat
   | PatternSucc _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
-  | PatternVar (StellaIdent name), _ -> [ (name, ty) ]
+  | PatternVar (StellaIdent name), _ -> Context.from_var name ty
   | _, _ -> not_implemented "deconstruct_pattern_binder"
 
 let find_dup (xs : string list) =
@@ -623,11 +621,10 @@ let rec check_type (ty : typeT) =
 
 let put_params (ctx : context) (params : paramDecl list) : context =
   List.iter (fun (AParamDecl (_, ty)) -> check_type ty) params;
-  List.concat
-    [
-      List.map (fun (AParamDecl (StellaIdent name, ty)) -> (name, ty)) params;
-      ctx;
-    ]
+  List.map
+    (fun (AParamDecl (StellaIdent name, ty)) -> Context.from_var name ty)
+    params
+  |> Context.concat |> Fun.flip Context.merge ctx
 
 module type Context = sig
   val ambiguous : exn -> typeT
@@ -663,12 +660,13 @@ module Make (Ctx : Context) = struct
     | Let (binders, expr'), _ ->
         (* TODO: check semantics *)
         let bindersCtx =
-          List.concat_map
+          List.map
             (fun (APatternBinding (p, expr'')) ->
               deconstruct_pattern_binder p (infer ctx expr''))
             binders
+          |> Context.concat
         in
-        let ctx' = List.concat [ bindersCtx; ctx ] in
+        let ctx' = Context.concat [ bindersCtx; ctx ] in
         typecheck ctx' expr' ty
     (* LetRec TODO *)
     | LessThan (e1, e2), _ ->
@@ -735,7 +733,7 @@ module Make (Ctx : Context) = struct
         List.iter
           (fun (AMatchCase (pat, expr'')) ->
             let ctx' =
-              List.concat [ deconstruct_pattern_binder pat ty'; ctx ]
+              Context.concat [ deconstruct_pattern_binder pat ty'; ctx ]
             in
             typecheck ctx' expr'' ty)
           cases;
@@ -885,7 +883,7 @@ module Make (Ctx : Context) = struct
           | None -> raise (TyExn (ExceptionTypeNotDeclared expr))
         in
         let ctx' =
-          List.concat [ deconstruct_pattern_binder pat exception_type ]
+          Context.concat [ deconstruct_pattern_binder pat exception_type ]
         in
         typecheck ctx' e2 ty
     | TryWith (e1, e2), _ ->
@@ -928,7 +926,7 @@ module Make (Ctx : Context) = struct
     | ConstMemory _, TypeTop -> ()
     | ConstMemory _, _ -> raise (TyExn (UnexpectedMemoryAddress (ty, expr)))
     | Var (StellaIdent name), _ -> (
-        match get ctx name with
+        match Context.get ctx name with
         | None -> raise (TyExn (UndefinedVariable (name, expr)))
         | Some ty' -> if neq ty' ty then Ctx.unexpected_type ty ty' expr else ()
         )
@@ -954,12 +952,13 @@ module Make (Ctx : Context) = struct
     | Let (binders, expr') ->
         (* TODO check semantics of let a = ..., b = a <- impossible in such tc *)
         let bindersCtx =
-          List.concat_map
+          List.map
             (fun (APatternBinding (p, expr'')) ->
               deconstruct_pattern_binder p (infer ctx expr''))
             binders
+          |> Context.concat
         in
-        let ctx' = List.concat [ bindersCtx; ctx ] in
+        let ctx' = Context.concat [ bindersCtx; ctx ] in
         infer ctx' expr'
     (* | LetRec of patternBinding list * expr TODO *)
     | LessThan (e1, e2) ->
@@ -1009,13 +1008,15 @@ module Make (Ctx : Context) = struct
     | Match (expr', AMatchCase (pat, expr'') :: cases) ->
         let ty' = infer ctx expr' in
         let tyRes =
-          let ctx' = List.concat [ deconstruct_pattern_binder pat ty'; ctx ] in
+          let ctx' =
+            Context.concat [ deconstruct_pattern_binder pat ty'; ctx ]
+          in
           infer ctx' expr''
         in
         List.iter
           (fun (AMatchCase (pat, expr'')) ->
             let ctx' =
-              List.concat [ deconstruct_pattern_binder pat ty'; ctx ]
+              Context.concat [ deconstruct_pattern_binder pat ty'; ctx ]
             in
             typecheck ctx' expr'' tyRes)
           cases;
@@ -1141,7 +1142,7 @@ module Make (Ctx : Context) = struct
           | None -> raise (TyExn (ExceptionTypeNotDeclared expr))
         in
         let ctx' =
-          List.concat [ deconstruct_pattern_binder pat exception_type ]
+          Context.concat [ deconstruct_pattern_binder pat exception_type ]
         in
         typecheck ctx' e2 ty;
         ty
@@ -1192,7 +1193,7 @@ module Make (Ctx : Context) = struct
     | ConstMemory _ ->
         TypeRef (Ctx.ambiguous (TyExn (AmbiguousReferenceType expr)))
     | Var (StellaIdent name) -> (
-        match get ctx name with
+        match Context.get ctx name with
         | Some ty -> ty
         | None -> raise (TyExn (UndefinedVariable (name, expr))))
     | _ -> not_implemented "infer"
@@ -1256,11 +1257,11 @@ let typecheckProgram (program : program) =
                 let tyParams =
                   List.map (fun (AParamDecl (name, tyParam)) -> tyParam) params
                 in
-                put a name (TypeFun (tyParams, tyReturn))
+                Context.put a name (TypeFun (tyParams, tyReturn))
             | DeclExceptionType _ -> a
             | DeclExceptionVariant _ -> a
             | _ -> not_implemented "typecheckProgram")
-          [] decls
+          Context.empty decls
       in
       check_main ctx;
       List.iter
