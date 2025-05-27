@@ -37,6 +37,10 @@ type tyError =
   | NotAReference of typeT * expr
   | UnexpectedMemoryAddress of typeT * expr
   | UnexpectedSubtype of typeT * typeT * expr
+  | OccursCheckInfiniteType of typeT
+  | NotAGenericFunction of typeT
+  | IncorrectNumberOfTypeArguments of typeT * typeT list
+  | UndefinedTypeVariable of typeT
 [@@deriving show]
 
 exception TyExn of tyError
@@ -178,6 +182,19 @@ let show_error (err : tyError) : string =
       "ERROR_UNEXPECTED_SUBTYPE\n  ожидался подтип типа\n    " ^ prtTypeT ty1
       ^ "\n  но получен тип\n    " ^ prtTypeT ty2 ^ "\n  в выражении\n    "
       ^ prtExpr expr
+  | OccursCheckInfiniteType ty ->
+      "ERROR_OCCURS_CHECK_INFINITE_TYPE\n\
+      \  в результате унификации возник бесконечный тип\n\
+      \   " ^ prtTypeT ty
+  | NotAGenericFunction ty ->
+      "ERROR_NOT_A_GENERIC_FUNCTION\n  тип\n    " ^ prtTypeT ty
+      ^ "\n не является обобщённым"
+  | IncorrectNumberOfTypeArguments (ty, tys) ->
+      "ERROR_INCORRECT_NUMBER_OF_TYPE_ARGUMENTS\n  типа\n    " ^ prtTypeT ty
+      ^ "\n  применено недостаточное количество аргументов"
+  | UndefinedTypeVariable ty ->
+      "ERROR_UNDEFINED_TYPE_VARIABLE\n  переменная\n    " ^ prtTypeT ty
+      ^ "\n  не определена"
 
 type context = (string * typeT) list
 
