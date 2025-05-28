@@ -395,8 +395,13 @@ let test_variant_exceptions () =
 let test_unify () =
   let unify = Stella.Typecheck.unify in
   let unify =
-   fun (tys : (string * string) list) ->
-    List.map (fun (a, b) -> (parse_string_typeT a, parse_string_typeT b)) tys
+   fun (tys : string list) ->
+    List.map
+      (fun s ->
+        let s' = String.split_on_char '=' s in
+        let a, b = (List.hd s', List.tl s' |> List.hd) in
+        (parse_string_typeT a, parse_string_typeT b))
+      tys
     |> unify
   in
   let check = Alcotest.check typeT in
@@ -412,8 +417,47 @@ let test_unify () =
         ignore sigma)
   in
   (* Sanity check *)
-  check_unify "X = Nat" "X" "Nat" [ ("X", "Nat") ];
-  check_not_unify "Y = fn(Y) -> Y" [ ("Y", "fn(Y) -> Y") ]
+  check_unify "X = Nat" "X" "Nat" [ "X = Nat" ];
+  check_not_unify "Y = fn(Y) -> Y" [ "Y = fn(Y) -> Y" ];
+
+  check_unify "X = Bool" "X" "Bool" [ "X = Bool" ];
+  check_unify "X = Unit" "X" "Unit" [ "X = Unit" ];
+  check_unify "Bool = X" "X" "Bool" [ "Bool = X" ];
+  check_unify "Nat = X" "X" "Nat" [ "Nat = X" ];
+
+  check_unify "X = Y, Y = X, Y = Nat" "X" "Nat" [ "X = Y"; "Y = X"; "Y = Nat" ];
+  check_unify "X = Y, Y = Z, Unit = Z" "X" "Unit"
+    [ "X = Y"; "Y = Z"; "Unit = Z" ];
+
+  check_unify "[X] = [Nat]" "X" "Nat" [ "[X] = [Nat]" ];
+  check_unify "[Nat] = [X]" "X" "Nat" [ "[X] = [Nat]" ];
+  check_unify "[[X]] = [[Nat]]" "X" "Nat" [ "[[X]] = [[Nat]]" ];
+  check_not_unify "[Nat] = [[X]]" [ "[Nat] = [[X]]" ];
+
+  check_unify "{X, Nat} = {Bool, Y}" "X" "Bool" [ "{X, Nat} = {Bool, Y}" ];
+  check_unify "{X, Nat} = {Bool, Y}" "Y" "Nat" [ "{X, Nat} = {Bool, Y}" ];
+  check_unify "{X, Nat} = {Bool, Y}" "Y" "{Nat, Nat}"
+    [ "{X, {Nat, Nat}} = {Bool, Y}" ];
+
+  check_unify "{x : X} = {x : Bool}" "X" "Bool" [ "{x : X} = {x : Bool}" ];
+  check_unify "{x : X} = {x : { y : Bool }}" "X" "{y : Bool}"
+    [ "{x : X} = {x : { y : Bool }}" ];
+  check_not_unify "{x : X} = {x : { y : Bool }, y : Bool}"
+    [ "{x : X} = {x : { y : Bool }, y : Bool}" ];
+  check_not_unify "{x : X, y : Bool} = {x : { y : Bool }}"
+    [ "{x : X, y : Bool} = {x : { y : Bool }}" ];
+
+  check_unify "X + Bool = Nat + Y" "X" "Nat" [ "X + Bool = Nat + Y" ];
+  check_unify "X + Bool = Nat + Y" "Y" "Bool" [ "X + Bool = Nat + Y" ];
+  check_unify "X + X = Nat + Y" "Y" "Nat" [ "X + X = Nat + Y" ];
+  check_unify "X + X = Y" "Y" "X + X" [ "X + X = Y" ];
+  check_not_unify "X + Y = Y" [ "X + Y = Y" ];
+
+  check_unify "X = { x : { Y, Z } }, [Y] = Z, { z : Z } = { z : [Unit] }" "X"
+    "{ x : { Unit, [Unit] }}"
+    [ "X = { x : { Y, Z } }"; "[Y] = Z"; "{ z : Z } = { z : [Unit] }" ];
+
+  check_unify "X = Bool" "X" "Bool" [ "X = Bool" ]
 
 let test_bugs () =
   let open Make (struct

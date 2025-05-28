@@ -233,6 +233,12 @@ let make_eq (restrictions : (typeT * typeT) list ref) =
     | TypeUnit, TypeUnit -> true
     | TypeRef ty1, TypeRef ty2 -> eq ty1 ty2
     | TypeBottom, TypeBottom -> true
+    | TypeVar (StellaIdent name1), TypeVar (StellaIdent name2) ->
+        if name1 = name2 then true
+        else if String.starts_with ~prefix:"?" name1 then (
+          restrictions := (ty1, ty2) :: !restrictions;
+          true)
+        else false
     | TypeVar (StellaIdent name), _ ->
         if String.starts_with ~prefix:"?" name then (
           restrictions := (ty1, ty2) :: !restrictions;
@@ -805,7 +811,7 @@ let unify (restrictions : (typeT * typeT) list) : typeT -> typeT =
                   | Some ty ->
                       convert fields'
                         (List.remove_assoc name fields2)
-                        ((ty1, ty2) :: fieldPairs, missingFields, extraFields)
+                        ((ty1, ty) :: fieldPairs, missingFields, extraFields)
                   | _ ->
                       convert fields'
                         (List.remove_assoc name fields2)
