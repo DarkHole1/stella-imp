@@ -619,6 +619,36 @@ let rec check_type (ty : typeT) =
   | TypeRef ty -> check_type ty
   | _ -> ()
 
+let auto_fresh (fresh_var : unit -> string) (ctx : context) : context =
+  let rec auto_fresh' = function
+    | TypeAuto -> TypeVar (StellaIdent (fresh_var ()))
+    | TypeFun (tys, ty) -> TypeFun (List.map auto_fresh' tys, auto_fresh' ty)
+    | TypeForAll (idents, ty) -> TypeForAll (idents, auto_fresh' ty)
+    | TypeRec (ident, ty) -> TypeRec (ident, auto_fresh' ty)
+    | TypeSum (tyL, tyR) -> TypeSum (auto_fresh' tyL, auto_fresh' tyR)
+    | TypeTuple tys -> TypeTuple (List.map auto_fresh' tys)
+    | TypeRecord fields ->
+        TypeRecord
+          (List.map
+             (fun (ARecordFieldType (name, ty)) ->
+               ARecordFieldType (name, auto_fresh' ty))
+             fields)
+    | TypeVariant fields ->
+        TypeVariant
+          (List.map
+             (fun (AVariantFieldType (name, optionalTyping)) ->
+               AVariantFieldType
+                 ( name,
+                   match optionalTyping with
+                   | SomeTyping ty -> SomeTyping (auto_fresh' ty)
+                   | x -> x ))
+             fields)
+    | TypeList ty -> TypeList (auto_fresh' ty)
+    | TypeRef ty -> TypeRef (auto_fresh' ty)
+    | ty -> ty
+  in
+  Context.map (fun (name, ty) -> (name, auto_fresh' ty)) ctx
+
 let put_params (ctx : context) (params : paramDecl list) : context =
   List.iter (fun (AParamDecl (_, ty)) -> check_type ty) params;
   List.map
@@ -1273,14 +1303,15 @@ let typecheckProgram (program : program) =
           Context.empty decls
       in
       check_main ctx;
+      let ctx' = auto_fresh fresh_var ctx in
       List.iter
         (function
           (* TODO: Add decl support *)
           | DeclFun
               ([], _, params, SomeReturnType tyReturn, NoThrowType, [], expr) ->
-              let ctx' = put_params ctx params in
+              let ctx'' = put_params ctx' params |> auto_fresh fresh_var in
               check_type tyReturn;
-              typecheck ctx' expr tyReturn
+              typecheck ctx'' expr tyReturn
           | DeclExceptionType _ -> ()
           | DeclExceptionVariant _ -> ()
           | _ -> not_implemented "typecheckProgram")

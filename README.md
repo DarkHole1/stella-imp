@@ -21,14 +21,8 @@ Note:
 - extensions don't checked now, we're assume that extension check is always succeed.
 
 ## TODO List:
-- [x] Error messages for all types of errors
-- [x] Equal / NotEqual errors (they actually only Nat)
-- [x] Variant typecheck
-- [x] Record typecheck
-- [x] Match
-- [x] Duplicate fields
-- [ ] Tests (basic ready)
-- [x] Match exhaustivness check
-- [ ] #nullary-functions and #multiparameter-functions
-- [ ] #letrec-bindings with #pattern-ascriptions
-- [ ] #let-many-bindings
+- [ ] unit
+- [ ] pairs
+- [ ] records
+- [ ] sum types
+- [ ] lists
