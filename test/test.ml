@@ -392,8 +392,28 @@ let test_variant_exceptions () =
     (o |- "throw (<| a = unit |>)" <= "Unit");
   check "throw (<| b = 0 |>) <= Unit" (o |- "throw (<| b = 0 |>)" <= "Unit")
 
-let test_reconstruction () =
-  check "succ(x) <=> nat" (o |- "succ(x)" <=> "Nat")
+let test_unify () =
+  let unify = Stella.Typecheck.unify in
+  let unify =
+   fun (tys : (string * string) list) ->
+    List.map (fun (a, b) -> (parse_string_typeT a, parse_string_typeT b)) tys
+    |> unify
+  in
+  let check = Alcotest.check typeT in
+  let check_unify (msg : string) (x : string) (res : string) tys =
+    let sigma = unify tys in
+    let x' = Stella.AbsStella.TypeVar (StellaIdent x) in
+    let res' = parse_string_typeT res in
+    check msg res' (sigma x')
+  in
+  let check_not_unify (msg : string) tys =
+    Alcotest.match_raises msg E.common (fun () ->
+        let sigma = unify tys in
+        ignore sigma)
+  in
+  (* Sanity check *)
+  check_unify "X = Nat" "X" "Nat" [ ("X", "Nat") ];
+  check_not_unify "Y = fn(Y) -> Y" [ ("Y", "fn(Y) -> Y") ]
 
 let test_bugs () =
   let open Make (struct
@@ -405,7 +425,7 @@ let test_bugs () =
   check "match (0) { x => x } <=> Nat" (o |- "match (0) { x => x }" <=> "Nat");
   check "match (fn (n : Nat) { return 0 }) { x => 0 } <=> Nat"
     (o |- "match (fn (n : Nat) { return 0 }) { x => 0 }" <=> "Nat")
-  (* check "*(if Nat::iszero(n) then <0x01> else <0x02>) <= Nat"
+(* check "*(if Nat::iszero(n) then <0x01> else <0x02>) <= Nat"
     (o |- "*(if Nat::iszero(n) then <0x01> else <0x02>)" <= "Nat") *)
 
 let () =
@@ -433,7 +453,7 @@ let () =
           Alcotest.test_case "Ambiguous as bottom" `Quick
             test_ambiguous_as_bottom;
           Alcotest.test_case "Variant errors" `Quick test_variant_exceptions;
-          Alcotest.test_case "Reconstruction" `Quick test_reconstruction;
         ] );
+      ("type variables", [ Alcotest.test_case "Unify" `Quick test_unify ]);
       ("bugs", [ Alcotest.test_case "Bugs" `Quick test_bugs ]);
     ]
