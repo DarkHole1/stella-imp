@@ -38,6 +38,14 @@ module Make (Ctx : Context) = struct
         raise (Typecheck.TyExn (UnexpectedSubtype (ty1, ty2, expr)))
       else fun ty1 ty2 expr ->
         raise (Typecheck.TyExn (UnexpectedTypeForExpression (ty1, ty2, expr)))
+
+    let counter = ref 0
+
+    let fresh_var () =
+      counter := !counter + 1;
+      Printf.sprintf "?T%d" !counter
+
+    let restrictions = ref []
   end)
 
   let typecheck (ctx : Typecheck.context) (expr : string) (ty : string) =

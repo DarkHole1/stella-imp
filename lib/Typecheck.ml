@@ -632,6 +632,8 @@ module type Context = sig
   val is_subtyping : bool
   val eq : typeT -> typeT -> bool
   val unexpected_type : typeT -> typeT -> expr -> 'a
+  val fresh_var : unit -> string
+  val restrictions : (typeT * typeT) list ref
 end
 
 module Make (Ctx : Context) = struct
@@ -1239,12 +1241,19 @@ let typecheckProgram (program : program) =
         else fun ty1 ty2 expr ->
           raise (TyExn (UnexpectedTypeForExpression (ty1, ty2, expr)))
       in
+      let count = ref 0 in
+      let fresh_var () : string =
+        count := !count + 1;
+        Printf.sprintf "?T%d" !count
+      in
       let module M = Make (struct
         let ambiguous = ambiguous
         let exception_type = exception_type
         let is_subtyping = is_subtyping
         let eq = eq
         let unexpected_type = unexpected_type
+        let fresh_var = fresh_var
+        let restrictions = ref []
       end) in
       let typecheck = M.typecheck in
       let ctx =
@@ -1265,8 +1274,7 @@ let typecheckProgram (program : program) =
       in
       check_main ctx;
       List.iter
-        (fun decl ->
-          match decl with
+        (function
           (* TODO: Add decl support *)
           | DeclFun
               ([], _, params, SomeReturnType tyReturn, NoThrowType, [], expr) ->

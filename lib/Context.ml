@@ -21,3 +21,6 @@ let merge (Context (vars, types) : t) (Context (vars', types') : t) : t =
   Context (List.concat [ vars; vars' ], List.concat [ types; types' ])
 
 let concat (ctxs : t list) : t = List.fold_left merge empty ctxs
+
+let map (f : string * typeT -> string * typeT) (Context (vars, types)) =
+  Context (List.map f vars, types)
