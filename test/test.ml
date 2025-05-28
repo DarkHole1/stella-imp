@@ -392,6 +392,9 @@ let test_variant_exceptions () =
     (o |- "throw (<| a = unit |>)" <= "Unit");
   check "throw (<| b = 0 |>) <= Unit" (o |- "throw (<| b = 0 |>)" <= "Unit")
 
+let test_reconstruction () =
+  check "succ(x) <=> nat" (o |- "succ(x)" <=> "Nat")
+
 let test_bugs () =
   let open Make (struct
     let structural_subtyping = true
@@ -430,6 +433,7 @@ let () =
           Alcotest.test_case "Ambiguous as bottom" `Quick
             test_ambiguous_as_bottom;
           Alcotest.test_case "Variant errors" `Quick test_variant_exceptions;
+          Alcotest.test_case "Reconstruction" `Quick test_reconstruction;
         ] );
       ("bugs", [ Alcotest.test_case "Bugs" `Quick test_bugs ]);
     ]

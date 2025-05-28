@@ -7,7 +7,7 @@ let pp (s : 'a -> ShowStella.showable) (fmt : Format.formatter) (v : 'a) : unit
 let pp_expr = pp ShowStella.showExpr
 let pp_typeT = pp ShowStella.showTypeT
 let[@warning "-unused-value-declaration"] expr = Alcotest.testable pp_expr ( = )
-let typeT = Alcotest.testable pp_typeT Typecheck.eq
+let typeT = Alcotest.testable pp_typeT (Typecheck.make_eq (ref []))
 
 let parse_string_expr (s : string) =
   Lexing.from_string s |> ParStella.pExpr LexStella.token
@@ -31,7 +31,8 @@ module Make (Ctx : Context) = struct
     let is_subtyping = Ctx.structural_subtyping
 
     let eq =
-      if Ctx.structural_subtyping then Typecheck.subtype else Typecheck.eq
+      if Ctx.structural_subtyping then Typecheck.subtype
+      else Typecheck.make_eq (ref [])
 
     let unexpected_type =
       if Ctx.structural_subtyping then fun ty1 ty2 expr ->

@@ -198,43 +198,57 @@ let show_error (err : tyError) : string =
 
 type context = Context.t
 
-let rec eq (ty1 : typeT) (ty2 : typeT) : bool =
-  match (ty1, ty2) with
-  | TypeFun (tyArgs1, tyRet1), TypeFun (tyArgs2, tyRet2) ->
-      List.compare_lengths tyArgs1 tyArgs2 = 0
-      && List.for_all2 eq tyArgs1 tyArgs2
-      && eq tyRet1 tyRet2
-  | TypeSum (ty11, ty12), TypeSum (ty21, ty22) -> eq ty11 ty21 && eq ty12 ty22
-  | TypeTuple tys1, TypeTuple tys2 ->
-      List.compare_lengths tys1 tys2 = 0 && List.for_all2 eq tys1 tys2
-  | TypeRecord fields1, TypeRecord fields2 ->
-      List.compare_lengths fields1 fields2 = 0
-      && List.for_all2
-           (fun (ARecordFieldType (StellaIdent name1, ty1))
-                (ARecordFieldType (StellaIdent name2, ty2)) ->
-             name1 = name2 && eq ty1 ty2)
-           fields1 fields2
-  | TypeVariant fields1, TypeVariant fields2 ->
-      List.compare_lengths fields1 fields2 = 0
-      && List.for_all2
-           (fun (AVariantFieldType (StellaIdent name1, typing1))
-                (AVariantFieldType (StellaIdent name2, typing2)) ->
-             name1 = name2
-             &&
-             match (typing1, typing2) with
-             | SomeTyping ty1, SomeTyping ty2 -> eq ty1 ty2
-             | NoTyping, NoTyping -> true
-             | _ -> false)
-           fields1 fields2
-  | TypeList ty1, TypeList ty2 -> eq ty1 ty2
-  | TypeBool, TypeBool -> true
-  | TypeNat, TypeNat -> true
-  | TypeUnit, TypeUnit -> true
-  | TypeRef ty1, TypeRef ty2 -> eq ty1 ty2
-  | TypeBottom, TypeBottom -> true
-  | _ -> false
+let make_eq (restrictions : (typeT * typeT) list ref) =
+  let rec eq (ty1 : typeT) (ty2 : typeT) : bool =
+    match (ty1, ty2) with
+    | TypeFun (tyArgs1, tyRet1), TypeFun (tyArgs2, tyRet2) ->
+        List.compare_lengths tyArgs1 tyArgs2 = 0
+        && List.for_all2 eq tyArgs1 tyArgs2
+        && eq tyRet1 tyRet2
+    | TypeSum (ty11, ty12), TypeSum (ty21, ty22) -> eq ty11 ty21 && eq ty12 ty22
+    | TypeTuple tys1, TypeTuple tys2 ->
+        List.compare_lengths tys1 tys2 = 0 && List.for_all2 eq tys1 tys2
+    | TypeRecord fields1, TypeRecord fields2 ->
+        List.compare_lengths fields1 fields2 = 0
+        && List.for_all2
+             (fun (ARecordFieldType (StellaIdent name1, ty1))
+                  (ARecordFieldType (StellaIdent name2, ty2)) ->
+               name1 = name2 && eq ty1 ty2)
+             fields1 fields2
+    | TypeVariant fields1, TypeVariant fields2 ->
+        List.compare_lengths fields1 fields2 = 0
+        && List.for_all2
+             (fun (AVariantFieldType (StellaIdent name1, typing1))
+                  (AVariantFieldType (StellaIdent name2, typing2)) ->
+               name1 = name2
+               &&
+               match (typing1, typing2) with
+               | SomeTyping ty1, SomeTyping ty2 -> eq ty1 ty2
+               | NoTyping, NoTyping -> true
+               | _ -> false)
+             fields1 fields2
+    | TypeList ty1, TypeList ty2 -> eq ty1 ty2
+    | TypeBool, TypeBool -> true
+    | TypeNat, TypeNat -> true
+    | TypeUnit, TypeUnit -> true
+    | TypeRef ty1, TypeRef ty2 -> eq ty1 ty2
+    | TypeBottom, TypeBottom -> true
+    | TypeVar (StellaIdent name), _ ->
+        if String.starts_with ~prefix:"?" name then (
+          restrictions := (ty1, ty2) :: !restrictions;
+          true)
+        else false
+    | _, TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then (
+          restrictions := (ty1, ty2) :: !restrictions;
+          true)
+        else false
+    | _ -> false
+  in
+  eq
 
-let neq (ty1 : typeT) (ty2 : typeT) : bool = eq ty1 ty2 |> not
+(* TODO: Check creation *)
+let neq (ty1 : typeT) (ty2 : typeT) : bool = make_eq (ref []) ty1 ty2 |> not
 
 let rec subtype (ty1 : typeT) (ty2 : typeT) : bool =
   (* print_endline
@@ -1264,7 +1278,8 @@ let typecheckProgram (program : program) =
             decls
       in
       let is_subtyping = List.mem "#structural-subtyping" extensions' in
-      let eq = if is_subtyping then subtype else eq in
+      let restrictions = ref [] in
+      let eq = if is_subtyping then subtype else make_eq restrictions in
       let unexpected_type =
         if is_subtyping then fun ty1 ty2 expr ->
           raise (TyExn (UnexpectedSubtype (ty1, ty2, expr)))
@@ -1283,7 +1298,7 @@ let typecheckProgram (program : program) =
         let eq = eq
         let unexpected_type = unexpected_type
         let fresh_var = fresh_var
-        let restrictions = ref []
+        let restrictions = restrictions
       end) in
       let typecheck = M.typecheck in
       let ctx =
