@@ -7,7 +7,12 @@ let pp (s : 'a -> ShowStella.showable) (fmt : Format.formatter) (v : 'a) : unit
 let pp_expr = pp ShowStella.showExpr
 let pp_typeT = pp ShowStella.showTypeT
 let[@warning "-unused-value-declaration"] expr = Alcotest.testable pp_expr ( = )
-let typeT = Alcotest.testable pp_typeT (Typecheck.make_eq (ref []))
+
+let strict_eq ty1 ty2 =
+  let r = ref [] in
+  Typecheck.make_eq r ty1 ty2 && List.length !r = 0
+
+let typeT = Alcotest.testable pp_typeT strict_eq
 
 let parse_string_expr (s : string) =
   Lexing.from_string s |> ParStella.pExpr LexStella.token
@@ -22,6 +27,13 @@ module type Context = sig
 end
 
 module Make (Ctx : Context) = struct
+  let restrictions = ref []
+  let counter = ref 0
+
+  let fresh_var () =
+    counter := !counter + 1;
+    Printf.sprintf "?T%d" !counter
+
   module TC = Typecheck.Make (struct
     let ambiguous =
       if Ctx.ambiguous_types_as_bottom then fun _ -> parse_string_typeT "Bot"
@@ -32,7 +44,7 @@ module Make (Ctx : Context) = struct
 
     let eq =
       if Ctx.structural_subtyping then Typecheck.subtype
-      else Typecheck.make_eq (ref [])
+      else Typecheck.make_eq restrictions
 
     let unexpected_type =
       if Ctx.structural_subtyping then fun ty1 ty2 expr ->
@@ -40,13 +52,8 @@ module Make (Ctx : Context) = struct
       else fun ty1 ty2 expr ->
         raise (Typecheck.TyExn (UnexpectedTypeForExpression (ty1, ty2, expr)))
 
-    let counter = ref 0
-
-    let fresh_var () =
-      counter := !counter + 1;
-      Printf.sprintf "?T%d" !counter
-
-    let restrictions = ref []
+    let fresh_var = fresh_var
+    let restrictions = restrictions
   end)
 
   let typecheck (ctx : Typecheck.context) (expr : string) (ty : string) =

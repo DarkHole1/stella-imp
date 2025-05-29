@@ -459,6 +459,91 @@ let test_unify () =
 
   check_unify "X = Bool" "X" "Bool" [ "X = Bool" ]
 
+let test_reconstruction () =
+  let check' = Alcotest.check typeT in
+  let check_rec (msg : string) (s : string) (ty : string) (l : string)
+      (r : string) =
+    let open Make (struct
+      let structural_subtyping = false
+      let ambiguous_types_as_bottom = false
+      let exception_type = None
+    end) in
+    let var = Stella.AbsStella.(TypeVar (StellaIdent (fresh_var ()))) in
+    let ctx = Stella.Context.from_var s var in
+    typecheck ctx l r;
+    let sigma = Stella.Typecheck.unify !restrictions in
+    check' msg (parse_string_typeT ty) (sigma var)
+  in
+  let infer_rec (msg : string) (s : string) (ty : string) (l : string) =
+    let open Make (struct
+      let structural_subtyping = false
+      let ambiguous_types_as_bottom = false
+      let exception_type = None
+    end) in
+    let var = Stella.AbsStella.(TypeVar (StellaIdent (fresh_var ()))) in
+    let ctx = Stella.Context.from_var s var in
+    infer ctx l |> ignore;
+    let sigma = Stella.Typecheck.unify !restrictions in
+    check' msg (parse_string_typeT ty) (sigma var)
+  in
+  let both_rec (msg : string) (s : string) (ty : string) (l : string)
+      (r : string) =
+    check_rec msg s ty l r;
+    infer_rec msg s ty l
+  in
+  (* Sanity check *)
+  both_rec "succ(x)" "x" "Nat" "succ(x)" "Nat";
+
+  both_rec "if x then 0 else 0" "x" "Bool" "if x then 0 else 0" "Nat";
+  both_rec "if true then x else 0" "x" "Nat" "if true then x else 0" "Nat";
+  both_rec "if true then unit else x" "x" "Unit" "if true then unit else x"
+    "Unit";
+
+  both_rec "x < 0" "x" "Nat" "x < 0" "Bool";
+  both_rec "0 < x" "x" "Nat" "0 < x" "Bool";
+  both_rec "x <= 0" "x" "Nat" "x <= 0" "Bool";
+  both_rec "0 <= x" "x" "Nat" "0 <= x" "Bool";
+  both_rec "x > 0" "x" "Nat" "x > 0" "Bool";
+  both_rec "0 > x" "x" "Nat" "0 > x" "Bool";
+  both_rec "x >= 0" "x" "Nat" "x >= 0" "Bool";
+  both_rec "0 >= x" "x" "Nat" "0 >= x" "Bool";
+  both_rec "x == 0" "x" "Nat" "x == 0" "Bool";
+  both_rec "0 == x" "x" "Nat" "0 == x" "Bool";
+  both_rec "x != 0" "x" "Nat" "x != 0" "Bool";
+  both_rec "0 != x" "x" "Nat" "0 != x" "Bool";
+
+  both_rec "x as Nat" "x" "Nat" "x as Nat" "Nat";
+  both_rec "x as Bool" "x" "Bool" "x as Bool" "Bool";
+
+  both_rec "[x, 0]" "x" "Nat" "[x, 0]" "[Nat]";
+  both_rec "[unit, x]" "x" "Unit" "[unit, x]" "[Unit]";
+
+  both_rec "x + 0" "x" "Nat" "x + 0" "Nat";
+  both_rec "0 + x" "x" "Nat" "0 + x" "Nat";
+  both_rec "x - 0" "x" "Nat" "x - 0" "Nat";
+  both_rec "0 - x" "x" "Nat" "0 - x" "Nat";
+  both_rec "x or false" "x" "Bool" "x or false" "Bool";
+  both_rec "false or x" "x" "Bool" "false or x" "Bool";
+  both_rec "x * 0" "x" "Nat" "x * 0" "Nat";
+  both_rec "0 * x" "x" "Nat" "0 * x" "Nat";
+  both_rec "x / 0" "x" "Nat" "x / 0" "Nat";
+  both_rec "0 / x" "x" "Nat" "0 / x" "Nat";
+  both_rec "x and true" "x" "Bool" "x and true" "Bool";
+  both_rec "true and x" "x" "Bool" "true and x" "Bool";
+
+  both_rec "succ(x(0))" "x" "fn (Nat) -> Nat" "succ(x(0))" "Nat";
+  both_rec "succ(x.y)" "x" "{ y : Nat }" "succ(x.y)" "Nat";
+  both_rec "x.1;succ(x.2)" "x" "{ Unit, Nat }" "x.1;succ(x.2)" "Nat";
+
+  both_rec "succ({ x = x, y = 0}.x)" "x" "Nat" "succ({ x = x, y = 0}.x)" "Nat";
+  both_rec "succ({ 0, x }.2)" "x" "Nat" "succ({ 0, x }.2)" "Nat";
+
+  both_rec "succ(fix(x)(unit))" "x" "fn (fn (Unit) -> Nat) -> fn (Unit) -> Nat"
+    "succ(fix(x)(unit))" "Nat";
+  both_rec "succ(Nat::rec(x, unit, fn (x : Nat) { return fn (y : Unit) { return y } }))" "x" "Nat" "succ(Nat::rec(x, unit, fn (x : Nat) { return fn (y : Unit) { return y } }))" "Unit";
+
+  check_rec "succ(x)" "x" "Nat" "succ(x)" "Nat"
+
 let test_bugs () =
   let open Make (struct
     let structural_subtyping = true
@@ -498,6 +583,10 @@ let () =
             test_ambiguous_as_bottom;
           Alcotest.test_case "Variant errors" `Quick test_variant_exceptions;
         ] );
-      ("type variables", [ Alcotest.test_case "Unify" `Quick test_unify ]);
+      ( "type variables",
+        [
+          Alcotest.test_case "Unify" `Quick test_unify;
+          Alcotest.test_case "Unify" `Quick test_reconstruction;
+        ] );
       ("bugs", [ Alcotest.test_case "Bugs" `Quick test_bugs ]);
     ]

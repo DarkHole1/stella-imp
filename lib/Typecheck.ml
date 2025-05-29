@@ -1438,6 +1438,21 @@ module Make (Ctx : Context) = struct
               (fun (eArg, tyArg) -> typecheck ctx eArg tyArg)
               (List.combine eArgs tyArgs);
             tyReturn
+        | TypeVar (StellaIdent name) ->
+            if String.starts_with ~prefix:"?" name then (
+              let fresh_args =
+                List.map
+                  (fun e ->
+                    let ty = TypeVar (StellaIdent (Ctx.fresh_var ())) in
+                    typecheck ctx e ty;
+                    ty)
+                  eArgs
+              in
+              let fresh_ret = TypeVar (StellaIdent (Ctx.fresh_var ())) in
+              Ctx.restrictions :=
+                (TypeFun (fresh_args, fresh_ret), tyFun) :: !Ctx.restrictions;
+              fresh_ret)
+            else raise (TyExn (NotAFunction (tyFun, expr)))
         | _ -> raise (TyExn (NotAFunction (tyFun, expr))))
     | DotRecord (expr', StellaIdent name) -> (
         let tyRec = infer ctx expr' in
@@ -1450,6 +1465,15 @@ module Make (Ctx : Context) = struct
               | [] -> raise (TyExn (UnexpectedFieldAccess (tyRec, name, expr)))
             in
             find_field fields
+        | TypeVar (StellaIdent name') ->
+            if String.starts_with ~prefix:"?" name' then (
+              let fresh_ty = TypeVar (StellaIdent (Ctx.fresh_var ())) in
+              Ctx.restrictions :=
+                ( TypeRecord [ ARecordFieldType (StellaIdent name, fresh_ty) ],
+                  tyRec )
+                :: !Ctx.restrictions;
+              fresh_ty)
+            else raise (TyExn (NotARecord (tyRec, expr)))
         | _ -> raise (TyExn (NotARecord (tyRec, expr))))
     | DotTuple (expr, n) -> (
         let ty = infer ctx expr in
@@ -1458,6 +1482,14 @@ module Make (Ctx : Context) = struct
             if List.compare_length_with tyTuple n < 0 || n <= 0 then
               raise (TyExn (TupleIndexOutOfBounds (ty, n, expr)))
             else List.nth tyTuple (n - 1)
+        | TypeVar (StellaIdent name) ->
+            if String.starts_with ~prefix:"?" name then (
+              let ty1 = TypeVar (StellaIdent (Ctx.fresh_var ())) in
+              let ty2 = TypeVar (StellaIdent (Ctx.fresh_var ())) in
+              Ctx.restrictions :=
+                (TypeTuple [ ty1; ty2 ], ty) :: !Ctx.restrictions;
+              List.nth [ ty1; ty2 ] (n - 1))
+            else raise (TyExn (NotATuple (ty, expr)))
         | _ -> raise (TyExn (NotATuple (ty, expr))))
     | Tuple exprs -> TypeTuple (List.map (infer ctx) exprs)
     | Record bindings ->
@@ -1545,6 +1577,13 @@ module Make (Ctx : Context) = struct
                 (TypeFun ([ tyArg ], tyRet))
                 expr
             else tyArg
+        | TypeVar (StellaIdent name) ->
+            if String.starts_with ~prefix:"?" name then (
+              let fresh_ty = TypeVar (StellaIdent (Ctx.fresh_var ())) in
+              Ctx.restrictions :=
+                (TypeFun ([ fresh_ty ], fresh_ty), ty) :: !Ctx.restrictions;
+              fresh_ty)
+            else raise (TyExn (NotAFunction (ty, expr)))
         | _ -> raise (TyExn (NotAFunction (ty, expr))))
     | NatRec (eN, eZ, eS) ->
         typecheck ctx eN TypeNat;
