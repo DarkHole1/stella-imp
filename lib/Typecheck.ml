@@ -599,15 +599,15 @@ let find_dup (xs : string list) =
   in
   find_dup' xs []
 
-let rec check_type (ty : typeT) =
+let rec check_type (ctx : context) (ty : typeT) =
   match ty with
   | TypeFun (types, res) ->
-      List.iter check_type types;
-      check_type res
+      List.iter (check_type ctx) types;
+      check_type ctx res
   | TypeSum (ty1, ty2) ->
-      check_type ty1;
-      check_type ty2
-  | TypeTuple types -> List.iter check_type types
+      check_type ctx ty1;
+      check_type ctx ty2
+  | TypeTuple types -> List.iter (check_type ctx) types
   | TypeRecord fieldTypes ->
       let dup =
         List.map
@@ -619,7 +619,7 @@ let rec check_type (ty : typeT) =
         raise (TyExn (DuplicateRecordTypeFields (dup, ty)))
       else
         List.map (fun (ARecordFieldType (_, ty)) -> ty) fieldTypes
-        |> List.iter check_type
+        |> List.iter (check_type ctx)
   | TypeVariant varTypes ->
       let dup =
         List.map
@@ -634,9 +634,12 @@ let rec check_type (ty : typeT) =
           (fun (AVariantFieldType (_, typing)) ->
             match typing with SomeTyping ty -> Some ty | NoTyping -> None)
           varTypes
-        |> List.iter check_type
-  | TypeList ty -> check_type ty
-  | TypeRef ty -> check_type ty
+        |> List.iter (check_type ctx)
+  | TypeList ty -> check_type ctx ty
+  | TypeRef ty -> check_type ctx ty
+  | TypeVar (StellaIdent name) ->
+      if Context.has_type ctx name then ()
+      else raise (TyExn (UndefinedTypeVariable ty))
   | _ -> ()
 
 let auto_fresh (fresh_var : unit -> string) (ctx : context) : context =
@@ -814,7 +817,7 @@ let rec fresh_decls (fresh_var : unit -> string) (decls : decl list) : decl list
     decls
 
 let put_params (ctx : context) (params : paramDecl list) : context =
-  List.iter (fun (AParamDecl (_, ty)) -> check_type ty) params;
+  List.iter (fun (AParamDecl (_, ty)) -> check_type ctx ty) params;
   List.map
     (fun (AParamDecl (StellaIdent name, ty)) -> Context.from_var name ty)
     params
@@ -1061,7 +1064,7 @@ module Make (Ctx : Context) = struct
     | TypeAsc (e1, ty'), _ ->
         if neq ty' ty then Ctx.unexpected_type ty ty' expr
         else (
-          check_type ty';
+          check_type ctx ty';
           typecheck ctx e1 ty')
     | Abstraction (params, expr'), TypeFun (tyParams, tyReturn) ->
         (* Check arity *)
@@ -1075,7 +1078,7 @@ module Make (Ctx : Context) = struct
             else ())
           tyParams params;
         let ctx' = put_params ctx params in
-        check_type tyReturn;
+        check_type ctx' tyReturn;
         typecheck ctx' expr' tyReturn
     | Abstraction _, TypeTop -> infer ctx expr |> ignore
     | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
@@ -1351,7 +1354,7 @@ module Make (Ctx : Context) = struct
         typecheck ctx e2 TypeNat;
         TypeBool
     | TypeAsc (expr', ty) ->
-        check_type ty;
+        check_type ctx ty;
         typecheck ctx expr' ty;
         ty
     | Abstraction (params, expr') ->
@@ -1667,6 +1670,13 @@ let typecheckProgram (AProgram (_, extensions, decls) : program) =
               List.map (fun (AParamDecl (name, tyParam)) -> tyParam) params
             in
             Context.put a name (TypeFun (tyParams, tyReturn))
+        | DeclFunGeneric
+            (_, StellaIdent name, tyP, params, SomeReturnType tyReturn, _, _, _)
+          ->
+            let tyParams =
+              List.map (fun (AParamDecl (name, tyParam)) -> tyParam) params
+            in
+            Context.put a name (TypeForAll (tyP, TypeFun (tyParams, tyReturn)))
         | DeclExceptionType _ -> a
         | DeclExceptionVariant _ -> a
         | _ -> not_implemented "typecheckProgram")
@@ -1679,7 +1689,17 @@ let typecheckProgram (AProgram (_, extensions, decls) : program) =
       | DeclFun ([], _, params, SomeReturnType tyReturn, NoThrowType, [], expr)
         ->
           let ctx' = put_params ctx params in
-          check_type tyReturn;
+          check_type ctx tyReturn;
+          typecheck ctx' expr tyReturn
+      | DeclFunGeneric
+          ([], _, tyP, params, SomeReturnType tyReturn, NoThrowType, [], expr)
+        ->
+          let ctx' =
+            List.map (fun (StellaIdent ident) -> ident) tyP
+            |> List.fold_left Context.put_type ctx
+          in
+          let ctx' = put_params ctx' params in
+          check_type ctx' tyReturn;
           typecheck ctx' expr tyReturn
       | DeclExceptionType _ -> ()
       | DeclExceptionVariant _ -> ()
