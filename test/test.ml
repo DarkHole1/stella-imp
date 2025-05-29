@@ -540,7 +540,11 @@ let test_reconstruction () =
 
   both_rec "succ(fix(x)(unit))" "x" "fn (fn (Unit) -> Nat) -> fn (Unit) -> Nat"
     "succ(fix(x)(unit))" "Nat";
-  both_rec "succ(Nat::rec(x, unit, fn (x : Nat) { return fn (y : Unit) { return y } }))" "x" "Nat" "succ(Nat::rec(x, unit, fn (x : Nat) { return fn (y : Unit) { return y } }))" "Unit";
+  both_rec
+    "Nat::rec(x, unit, fn (x : Nat) { return fn (y : Unit) { return y } })" "x"
+    "Nat"
+    "Nat::rec(x, unit, fn (x : Nat) { return fn (y : Unit) { return y } })"
+    "Unit";
 
   check_rec "succ(x)" "x" "Nat" "succ(x)" "Nat"
 
