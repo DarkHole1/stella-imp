@@ -669,6 +669,150 @@ let auto_fresh (fresh_var : unit -> string) (ctx : context) : context =
   in
   Context.map (fun (name, ty) -> (name, auto_fresh' ty)) ctx
 
+let rec fresh_decls (fresh_var : unit -> string) (decls : decl list) : decl list
+    =
+  let rec fresh_type = function
+    | TypeAuto -> TypeVar (StellaIdent (fresh_var ()))
+    | TypeFun (tys, ty) -> TypeFun (List.map fresh_type tys, fresh_type ty)
+    | TypeForAll (idents, ty) -> TypeForAll (idents, fresh_type ty)
+    | TypeRec (ident, ty) -> TypeRec (ident, fresh_type ty)
+    | TypeSum (tyL, tyR) -> TypeSum (fresh_type tyL, fresh_type tyR)
+    | TypeTuple tys -> TypeTuple (List.map fresh_type tys)
+    | TypeRecord fields ->
+        TypeRecord
+          (List.map
+             (fun (ARecordFieldType (name, ty)) ->
+               ARecordFieldType (name, fresh_type ty))
+             fields)
+    | TypeVariant fields ->
+        TypeVariant
+          (List.map
+             (fun (AVariantFieldType (name, optionalTyping)) ->
+               AVariantFieldType
+                 ( name,
+                   match optionalTyping with
+                   | SomeTyping ty -> SomeTyping (fresh_type ty)
+                   | x -> x ))
+             fields)
+    | TypeList ty -> TypeList (fresh_type ty)
+    | TypeRef ty -> TypeRef (fresh_type ty)
+    | ty -> ty
+  in
+  let fresh_params =
+    List.map (fun (AParamDecl (ident, ty)) -> AParamDecl (ident, fresh_type ty))
+  in
+  let fresh_return = function
+    | SomeReturnType ty -> SomeReturnType (fresh_type ty)
+    | NoReturnType -> NoReturnType
+  in
+  let fresh_throws = function
+    | SomeThrowType ty -> SomeThrowType (List.map fresh_type ty)
+    | NoThrowType -> NoThrowType
+  in
+  let rec fresh_expr : expr -> expr = function
+    | Sequence (e1, e2) -> Sequence (fresh_expr e1, fresh_expr e2)
+    | Assign (e1, e2) -> Assign (fresh_expr e1, fresh_expr e2)
+    | If (e1, e2, e3) -> If (fresh_expr e1, fresh_expr e2, fresh_expr e3)
+    | Let (patterns, expr) ->
+        (* I don't know what to do with patterns in let *)
+        Let (patterns, fresh_expr expr)
+    | LetRec (patterns, expr) -> LetRec (patterns, fresh_expr expr)
+    | TypeAbstraction (idents, expr) -> TypeAbstraction (idents, fresh_expr expr)
+    | LessThan (e1, e2) -> LessThan (fresh_expr e1, fresh_expr e2)
+    | LessThanOrEqual (e1, e2) -> LessThanOrEqual (fresh_expr e1, fresh_expr e2)
+    | GreaterThan (e1, e2) -> GreaterThan (fresh_expr e1, fresh_expr e2)
+    | GreaterThanOrEqual (e1, e2) ->
+        GreaterThanOrEqual (fresh_expr e1, fresh_expr e2)
+    | Equal (e1, e2) -> Equal (fresh_expr e1, fresh_expr e2)
+    | NotEqual (e1, e2) -> NotEqual (fresh_expr e1, fresh_expr e2)
+    | TypeAsc (expr, ty) -> TypeAsc (fresh_expr expr, fresh_type ty)
+    | TypeCast (expr, ty) -> TypeAsc (fresh_expr expr, fresh_type ty)
+    | Abstraction (params, expr) ->
+        Abstraction (fresh_params params, fresh_expr expr)
+    | Variant (ident, exprData) ->
+        Variant
+          ( ident,
+            match exprData with
+            | SomeExprData expr -> SomeExprData (fresh_expr expr)
+            | NoExprData -> NoExprData )
+    | Match (expr, cases) ->
+        Match
+          ( fresh_expr expr,
+            List.map
+              (fun (AMatchCase (pattern, expr)) ->
+                AMatchCase (pattern, fresh_expr expr))
+              cases )
+    | List exprs -> List (List.map fresh_expr exprs)
+    | Add (e1, e2) -> Add (fresh_expr e1, fresh_expr e2)
+    | Subtract (e1, e2) -> Subtract (fresh_expr e1, fresh_expr e2)
+    | LogicOr (e1, e2) -> LogicOr (fresh_expr e1, fresh_expr e2)
+    | Multiply (e1, e2) -> Multiply (fresh_expr e1, fresh_expr e2)
+    | Divide (e1, e2) -> Divide (fresh_expr e1, fresh_expr e2)
+    | LogicAnd (e1, e2) -> LogicAnd (fresh_expr e1, fresh_expr e2)
+    | Ref expr -> Ref (fresh_expr expr)
+    | Deref expr -> Deref (fresh_expr expr)
+    | Application (expr, exprs) ->
+        Application (fresh_expr expr, List.map fresh_expr exprs)
+    | TypeApplication (expr, tys) ->
+        TypeApplication (fresh_expr expr, List.map fresh_type tys)
+    | DotRecord (expr, ident) -> DotRecord (fresh_expr expr, ident)
+    | DotTuple (expr, offset) -> DotTuple (fresh_expr expr, offset)
+    | Tuple exprs -> Tuple (List.map fresh_expr exprs)
+    | Record bindings ->
+        Record
+          (List.map
+             (fun (ABinding (ident, expr)) -> ABinding (ident, fresh_expr expr))
+             bindings)
+    | ConsList (e1, e2) -> ConsList (fresh_expr e1, fresh_expr e2)
+    | Head expr -> Head (fresh_expr expr)
+    | IsEmpty expr -> IsEmpty (fresh_expr expr)
+    | Tail expr -> Tail (fresh_expr expr)
+    | Throw expr -> Throw (fresh_expr expr)
+    | TryCatch (e1, pattern, e2) ->
+        TryCatch (fresh_expr e1, pattern, fresh_expr e2)
+    | TryWith (e1, e2) -> TryWith (fresh_expr e1, fresh_expr e2)
+    | TryCastAs (e1, ty, pattern, e2, e3) ->
+        TryCastAs (fresh_expr e1, fresh_type ty, pattern, e2, e3)
+    | Inl expr -> Inl (fresh_expr expr)
+    | Inr expr -> Inr (fresh_expr expr)
+    | Succ expr -> Succ (fresh_expr expr)
+    | LogicNot expr -> LogicNot (fresh_expr expr)
+    | Pred expr -> Pred (fresh_expr expr)
+    | IsZero expr -> IsZero (fresh_expr expr)
+    | Fix expr -> Fix (fresh_expr expr)
+    | NatRec (e1, e2, e3) -> NatRec (fresh_expr e1, fresh_expr e2, fresh_expr e3)
+    | Fold (ty, expr) -> Fold (fresh_type ty, fresh_expr expr)
+    | Unfold (ty, expr) -> Fold (fresh_type ty, fresh_expr expr)
+    | expr -> expr
+  in
+  List.map
+    (function
+      | DeclFun (annotations, ident, params, tyRet, throws, decls, expr) ->
+          DeclFun
+            ( annotations,
+              ident,
+              fresh_params params,
+              fresh_return tyRet,
+              fresh_throws throws,
+              fresh_decls fresh_var decls,
+              fresh_expr expr )
+      | DeclFunGeneric
+          (annotations, ident, tyArgs, params, tyRet, throws, decls, expr) ->
+          DeclFunGeneric
+            ( annotations,
+              ident,
+              tyArgs,
+              fresh_params params,
+              fresh_return tyRet,
+              fresh_throws throws,
+              fresh_decls fresh_var decls,
+              fresh_expr expr )
+      | DeclTypeAlias (ident, ty) -> DeclTypeAlias (ident, fresh_type ty)
+      | DeclExceptionType ty -> DeclExceptionType (fresh_type ty)
+      | DeclExceptionVariant (ident, ty) ->
+          DeclExceptionVariant (ident, fresh_type ty))
+    decls
+
 let put_params (ctx : context) (params : paramDecl list) : context =
   List.iter (fun (AParamDecl (_, ty)) -> check_type ty) params;
   List.map
@@ -1420,89 +1564,84 @@ module Make (Ctx : Context) = struct
     | _ -> not_implemented "infer"
 end
 
-let typecheckProgram (program : program) =
-  match program with
-  | AProgram (_, extensions, decls) ->
-      let extensions' =
+let typecheckProgram (AProgram (_, extensions, decls) : program) =
+  let extensions' =
+    List.concat_map
+      (fun (AnExtension ext) -> List.map (fun (ExtensionName name) -> name) ext)
+      extensions
+  in
+  let ambiguous =
+    if List.mem "#ambiguous-type-as-bottom" extensions' then fun e -> TypeBottom
+    else fun e -> raise e
+  in
+  let exception_type =
+    if List.mem "#open-variant-exceptions" extensions' then
+      let variants =
         List.concat_map
-          (fun (AnExtension ext) ->
-            List.map (fun (ExtensionName name) -> name) ext)
-          extensions
+          (function
+            | DeclExceptionVariant (ident, ty) ->
+                [ AVariantFieldType (ident, SomeTyping ty) ]
+            | _ -> [])
+          decls
       in
-      let ambiguous =
-        if List.mem "#ambiguous-type-as-bottom" extensions' then fun e ->
-          TypeBottom
-        else fun e -> raise e
-      in
-      let exception_type =
-        if List.mem "#open-variant-exceptions" extensions' then
-          let variants =
-            List.concat_map
-              (function
-                | DeclExceptionVariant (ident, ty) ->
-                    [ AVariantFieldType (ident, SomeTyping ty) ]
-                | _ -> [])
-              decls
-          in
-          if List.compare_length_with variants 0 = 0 then None
-          else Some (TypeVariant variants)
-        else
-          List.find_map
-            (fun decl ->
-              match decl with DeclExceptionType ty -> Some ty | _ -> None)
-            decls
-      in
-      let is_subtyping = List.mem "#structural-subtyping" extensions' in
-      let restrictions = ref [] in
-      let eq = if is_subtyping then subtype else make_eq restrictions in
-      let unexpected_type =
-        if is_subtyping then fun ty1 ty2 expr ->
-          raise (TyExn (UnexpectedSubtype (ty1, ty2, expr)))
-        else fun ty1 ty2 expr ->
-          raise (TyExn (UnexpectedTypeForExpression (ty1, ty2, expr)))
-      in
-      let count = ref 0 in
-      let fresh_var () : string =
-        count := !count + 1;
-        Printf.sprintf "?T%d" !count
-      in
-      let module M = Make (struct
-        let ambiguous = ambiguous
-        let exception_type = exception_type
-        let is_subtyping = is_subtyping
-        let eq = eq
-        let unexpected_type = unexpected_type
-        let fresh_var = fresh_var
-        let restrictions = restrictions
-      end) in
-      let typecheck = M.typecheck in
-      let ctx =
-        List.fold_left
-          (fun a b ->
-            match b with
-            | DeclFun
-                (_, StellaIdent name, params, SomeReturnType tyReturn, _, _, _)
-              ->
-                let tyParams =
-                  List.map (fun (AParamDecl (name, tyParam)) -> tyParam) params
-                in
-                Context.put a name (TypeFun (tyParams, tyReturn))
-            | DeclExceptionType _ -> a
-            | DeclExceptionVariant _ -> a
-            | _ -> not_implemented "typecheckProgram")
-          Context.empty decls
-      in
-      check_main ctx;
-      let ctx' = auto_fresh fresh_var ctx in
-      List.iter
-        (function
-          (* TODO: Add decl support *)
-          | DeclFun
-              ([], _, params, SomeReturnType tyReturn, NoThrowType, [], expr) ->
-              let ctx'' = put_params ctx' params |> auto_fresh fresh_var in
-              check_type tyReturn;
-              typecheck ctx'' expr tyReturn
-          | DeclExceptionType _ -> ()
-          | DeclExceptionVariant _ -> ()
-          | _ -> not_implemented "typecheckProgram")
+      if List.compare_length_with variants 0 = 0 then None
+      else Some (TypeVariant variants)
+    else
+      List.find_map
+        (fun decl ->
+          match decl with DeclExceptionType ty -> Some ty | _ -> None)
         decls
+  in
+  let is_subtyping = List.mem "#structural-subtyping" extensions' in
+  let restrictions = ref [] in
+  let eq = if is_subtyping then subtype else make_eq restrictions in
+  let unexpected_type =
+    if is_subtyping then fun ty1 ty2 expr ->
+      raise (TyExn (UnexpectedSubtype (ty1, ty2, expr)))
+    else fun ty1 ty2 expr ->
+      raise (TyExn (UnexpectedTypeForExpression (ty1, ty2, expr)))
+  in
+  let count = ref 0 in
+  let fresh_var () : string =
+    count := !count + 1;
+    Printf.sprintf "?T%d" !count
+  in
+  let module M = Make (struct
+    let ambiguous = ambiguous
+    let exception_type = exception_type
+    let is_subtyping = is_subtyping
+    let eq = eq
+    let unexpected_type = unexpected_type
+    let fresh_var = fresh_var
+    let restrictions = restrictions
+  end) in
+  let typecheck = M.typecheck in
+  let decls = fresh_decls fresh_var decls in
+  let ctx =
+    List.fold_left
+      (fun a b ->
+        match b with
+        | DeclFun (_, StellaIdent name, params, SomeReturnType tyReturn, _, _, _)
+          ->
+            let tyParams =
+              List.map (fun (AParamDecl (name, tyParam)) -> tyParam) params
+            in
+            Context.put a name (TypeFun (tyParams, tyReturn))
+        | DeclExceptionType _ -> a
+        | DeclExceptionVariant _ -> a
+        | _ -> not_implemented "typecheckProgram")
+      Context.empty decls
+  in
+  check_main ctx;
+  List.iter
+    (function
+      (* TODO: Add decl support *)
+      | DeclFun ([], _, params, SomeReturnType tyReturn, NoThrowType, [], expr)
+        ->
+          let ctx' = put_params ctx params in
+          check_type tyReturn;
+          typecheck ctx' expr tyReturn
+      | DeclExceptionType _ -> ()
+      | DeclExceptionVariant _ -> ()
+      | _ -> not_implemented "typecheckProgram")
+    decls
