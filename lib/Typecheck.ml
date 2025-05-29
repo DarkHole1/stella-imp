@@ -1593,6 +1593,7 @@ let typecheckProgram (AProgram (_, extensions, decls) : program) =
         decls
   in
   let is_subtyping = List.mem "#structural-subtyping" extensions' in
+  let is_reconstruction = List.mem "#type-reconstruction" extensions' in
   let restrictions = ref [] in
   let eq = if is_subtyping then subtype else make_eq restrictions in
   let unexpected_type =
@@ -1644,4 +1645,8 @@ let typecheckProgram (AProgram (_, extensions, decls) : program) =
       | DeclExceptionType _ -> ()
       | DeclExceptionVariant _ -> ()
       | _ -> not_implemented "typecheckProgram")
-    decls
+    decls;
+  if is_reconstruction then
+    let sigma = unify !restrictions in
+    ignore sigma
+  else ()
