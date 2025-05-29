@@ -823,39 +823,40 @@ let put_params (ctx : context) (params : paramDecl list) : context =
     params
   |> Context.concat |> Fun.flip Context.merge ctx
 
-let substitute (from : string) (_to : typeT) (_in : typeT) =
-  let rec s (_in : typeT) =
-    match _in with
-    | TypeFun (tys, ty) -> TypeFun (List.map s tys, s ty)
-    | TypeForAll (idents, ty) ->
-        if List.exists (fun (StellaIdent name) -> name = from) idents then _in
-        else TypeForAll (idents, s ty)
-    | TypeRec (StellaIdent name, ty) ->
-        if name = from then _in else TypeRec (StellaIdent name, s ty)
-    | TypeSum (tyL, tyR) -> TypeSum (s tyL, s tyR)
-    | TypeTuple tys -> TypeTuple (List.map s tys)
-    | TypeRecord fields ->
-        TypeRecord
-          (List.map
-             (fun (ARecordFieldType (name, ty)) ->
-               ARecordFieldType (name, s ty))
-             fields)
-    | TypeVariant fields ->
-        TypeVariant
-          (List.map
-             (fun (AVariantFieldType (name, typing)) ->
-               AVariantFieldType
-                 ( name,
-                   match typing with
-                   | SomeTyping ty -> SomeTyping (s ty)
-                   | NoTyping -> NoTyping ))
-             fields)
-    | TypeList ty -> TypeList (s ty)
-    | TypeRef ty -> TypeRef (s ty)
-    | TypeVar (StellaIdent name) -> if name = from then _to else _in
-    | _ -> _in
-  in
-  s _in
+let rec used_vars (ty : typeT) : Set.Make(String).t =
+  let module StringSet = Set.Make (String) in
+  match ty with
+  | TypeFun (tys, ty) ->
+      List.fold_left
+        (fun s ty -> StringSet.union s (used_vars ty))
+        StringSet.empty (ty :: tys)
+  | TypeForAll (idents, ty) ->
+      let res = used_vars ty in
+      let var =
+        List.map (fun (StellaIdent name) -> name) idents |> StringSet.of_list
+      in
+      StringSet.diff res var
+  (* | TypeRec of stellaIdent * typeT not supported *)
+  | TypeSum (ty1, ty2) -> StringSet.union (used_vars ty1) (used_vars ty2)
+  | TypeTuple tys ->
+      List.fold_left
+        (fun s ty -> StringSet.union s (used_vars ty))
+        StringSet.empty tys
+  | TypeRecord fields ->
+      List.fold_left
+        (fun s (ARecordFieldType (_, ty)) -> StringSet.union s (used_vars ty))
+        StringSet.empty fields
+  | TypeVariant fields ->
+      List.fold_left
+        (fun s (AVariantFieldType (_, typing)) ->
+          match typing with
+          | SomeTyping ty -> StringSet.union s (used_vars ty)
+          | _ -> s)
+        StringSet.empty fields
+  | TypeList ty -> used_vars ty
+  | TypeRef ty -> used_vars ty
+  | TypeVar (StellaIdent name) -> StringSet.singleton name
+  | _ -> StringSet.empty
 
 let check_recur (var : string) (_in : typeT) : bool =
   let rec check_recur' (_in : typeT) : bool =
@@ -886,112 +887,6 @@ let check_recur (var : string) (_in : typeT) : bool =
   in
   check_recur' _in
 
-let unify (restrictions : (typeT * typeT) list) : typeT -> typeT =
-  let rec unify' (restrictions : (typeT * typeT) list) (sigma : typeT -> typeT)
-      : typeT -> typeT =
-    match restrictions with
-    | (ty1, ty2) :: restrictions' -> (
-        match (ty1, ty2) with
-        | TypeVar (StellaIdent name), TypeVar (StellaIdent name') ->
-            if name = name' then unify' restrictions' sigma
-            else
-              let subs = substitute name (TypeVar (StellaIdent name')) in
-              unify'
-                (List.map (fun (a, b) -> (subs a, subs b)) restrictions')
-                (fun t -> sigma t |> subs)
-        | TypeVar (StellaIdent name), _ ->
-            if check_recur name ty2 then
-              raise (TyExn (OccursCheckInfiniteType ty2))
-            else
-              let subs = substitute name ty2 in
-              unify'
-                (List.map (fun (a, b) -> (subs a, subs b)) restrictions')
-                (fun t -> sigma t |> subs)
-        | _, TypeVar (StellaIdent name) ->
-            if check_recur name ty1 then
-              raise (TyExn (OccursCheckInfiniteType ty1))
-            else
-              let subs = substitute name ty1 in
-              unify'
-                (List.map (fun (a, b) -> (subs a, subs b)) restrictions')
-                (fun t -> sigma t |> subs)
-        | TypeFun (tyArgs1, tyRet1), TypeFun (tyArgs2, tyRet2) ->
-            let restrictions'' =
-              List.concat
-                [
-                  List.combine tyArgs1 tyArgs2;
-                  [ (tyRet1, tyRet2) ];
-                  restrictions';
-                ]
-            in
-            unify' restrictions'' sigma
-        (* | TypeForAll not supported :shrug: *)
-        (* | TypeRec not supported too *)
-        | TypeSum (tyL1, tyR1), TypeSum (tyL2, tyR2) ->
-            let restrictions'' =
-              (tyL1, tyL2) :: (tyR1, tyR2) :: restrictions'
-            in
-            unify' restrictions'' sigma
-        | TypeTuple tys1, TypeTuple tys2 ->
-            let restrictions'' =
-              List.concat [ List.combine tys1 tys2; restrictions' ]
-            in
-            unify' restrictions'' sigma
-        | TypeRecord fields1, TypeRecord fields2 ->
-            let fields1' =
-              List.map
-                (fun (ARecordFieldType (StellaIdent name, ty')) -> (name, ty'))
-                fields1
-            in
-            let fields2' =
-              List.map
-                (fun (ARecordFieldType (StellaIdent name, ty')) -> (name, ty'))
-                fields2
-            in
-            let rec convert (fields1 : (string * typeT) list)
-                (fields2 : (string * typeT) list)
-                ((fieldPairs, missingFields, extraFields) :
-                  (typeT * typeT) list * string list * string list) =
-              match fields1 with
-              | (name, ty1) :: fields' -> (
-                  match List.assoc_opt name fields2 with
-                  | Some ty ->
-                      convert fields'
-                        (List.remove_assoc name fields2)
-                        ((ty1, ty) :: fieldPairs, missingFields, extraFields)
-                  | _ ->
-                      convert fields'
-                        (List.remove_assoc name fields2)
-                        (fieldPairs, missingFields, name :: extraFields))
-              | _ ->
-                  ( fieldPairs,
-                    List.concat
-                      [ List.map (fun (a, _) -> a) fields2; missingFields ],
-                    extraFields )
-            in
-            let fieldPairs, missingFields, extraFields =
-              convert fields1' fields2' ([], [], [])
-            in
-            if List.compare_length_with extraFields 0 <> 0 then
-              (* TODO: Version for unify *)
-              raise
-                (TyExn (UnexpectedRecordFields (extraFields, ty2, ConstUnit)))
-            else if List.compare_length_with missingFields 0 <> 0 then
-              raise
-                (TyExn (MissingRecordFields (missingFields, ty2, ConstUnit)))
-            else unify' fieldPairs sigma
-        (* | TypeVariant tricky not supported *)
-        | TypeList ty1', TypeList ty2' ->
-            unify' ((ty1', ty2') :: restrictions') sigma
-        | TypeRef ty1', TypeRef ty2' ->
-            unify' ((ty1', ty2') :: restrictions') sigma
-        | _ ->
-            (* TODO: Add unification error *)
-            raise (TyExn (UnexpectedTypeForExpression (ty1, ty2, ConstUnit))))
-    | [] -> sigma
-  in
-  unify' restrictions Fun.id
-
 module type Context = sig
   val ambiguous : exn -> typeT
   val exception_type : typeT option
@@ -1004,6 +899,174 @@ end
 
 module Make (Ctx : Context) = struct
   let neq (ty1 : typeT) (ty2 : typeT) : bool = Ctx.eq ty1 ty2 |> not
+
+  let rec substitute (from : string) (_to : typeT) (_in : typeT) =
+    let rec s (_in : typeT) =
+      match _in with
+      | TypeFun (tys, ty) -> TypeFun (List.map s tys, s ty)
+      | TypeForAll (idents, ty) ->
+          if List.exists (fun (StellaIdent name) -> name = from) idents then _in
+          else
+            let module StringSet = Set.Make (String) in
+            let used = used_vars _to in
+            if
+              List.exists
+                (fun (StellaIdent name) -> StringSet.mem name used)
+                idents
+            then
+              let ty', names =
+                List.fold_left
+                  (fun ((ty, names) : typeT * stellaIdent list)
+                       (StellaIdent name) ->
+                    let fresh_name = StellaIdent ("!" ^ Ctx.fresh_var ()) in
+                    let fresh_ty = TypeVar fresh_name in
+                    (substitute name fresh_ty ty, fresh_name :: names))
+                  (ty, []) idents
+              in
+              TypeForAll (names, s ty')
+            else TypeForAll (idents, s ty)
+      | TypeRec (StellaIdent name, ty) ->
+          if name = from then _in else TypeRec (StellaIdent name, s ty)
+      | TypeSum (tyL, tyR) -> TypeSum (s tyL, s tyR)
+      | TypeTuple tys -> TypeTuple (List.map s tys)
+      | TypeRecord fields ->
+          TypeRecord
+            (List.map
+               (fun (ARecordFieldType (name, ty)) ->
+                 ARecordFieldType (name, s ty))
+               fields)
+      | TypeVariant fields ->
+          TypeVariant
+            (List.map
+               (fun (AVariantFieldType (name, typing)) ->
+                 AVariantFieldType
+                   ( name,
+                     match typing with
+                     | SomeTyping ty -> SomeTyping (s ty)
+                     | NoTyping -> NoTyping ))
+               fields)
+      | TypeList ty -> TypeList (s ty)
+      | TypeRef ty -> TypeRef (s ty)
+      | TypeVar (StellaIdent name) -> if name = from then _to else _in
+      | _ -> _in
+    in
+    s _in
+
+  let apply_type (tys : typeT list) (names : string list) (ty : typeT) : typeT =
+    let names' = List.map (fun x -> StellaIdent x) names in
+    if List.compare_lengths tys names <> 0 then
+      raise
+        (TyExn (IncorrectNumberOfTypeArguments (TypeForAll (names', ty), tys)))
+    else
+      List.fold_left2 (fun ty from _to -> substitute from _to ty) ty names tys
+
+  let unify (restrictions : (typeT * typeT) list) : typeT -> typeT =
+    let rec unify' (restrictions : (typeT * typeT) list)
+        (sigma : typeT -> typeT) : typeT -> typeT =
+      match restrictions with
+      | (ty1, ty2) :: restrictions' -> (
+          match (ty1, ty2) with
+          | TypeVar (StellaIdent name), TypeVar (StellaIdent name') ->
+              if name = name' then unify' restrictions' sigma
+              else
+                let subs = substitute name (TypeVar (StellaIdent name')) in
+                unify'
+                  (List.map (fun (a, b) -> (subs a, subs b)) restrictions')
+                  (fun t -> sigma t |> subs)
+          | TypeVar (StellaIdent name), _ ->
+              if check_recur name ty2 then
+                raise (TyExn (OccursCheckInfiniteType ty2))
+              else
+                let subs = substitute name ty2 in
+                unify'
+                  (List.map (fun (a, b) -> (subs a, subs b)) restrictions')
+                  (fun t -> sigma t |> subs)
+          | _, TypeVar (StellaIdent name) ->
+              if check_recur name ty1 then
+                raise (TyExn (OccursCheckInfiniteType ty1))
+              else
+                let subs = substitute name ty1 in
+                unify'
+                  (List.map (fun (a, b) -> (subs a, subs b)) restrictions')
+                  (fun t -> sigma t |> subs)
+          | TypeFun (tyArgs1, tyRet1), TypeFun (tyArgs2, tyRet2) ->
+              let restrictions'' =
+                List.concat
+                  [
+                    List.combine tyArgs1 tyArgs2;
+                    [ (tyRet1, tyRet2) ];
+                    restrictions';
+                  ]
+              in
+              unify' restrictions'' sigma
+          (* | TypeForAll not supported :shrug: *)
+          (* | TypeRec not supported too *)
+          | TypeSum (tyL1, tyR1), TypeSum (tyL2, tyR2) ->
+              let restrictions'' =
+                (tyL1, tyL2) :: (tyR1, tyR2) :: restrictions'
+              in
+              unify' restrictions'' sigma
+          | TypeTuple tys1, TypeTuple tys2 ->
+              let restrictions'' =
+                List.concat [ List.combine tys1 tys2; restrictions' ]
+              in
+              unify' restrictions'' sigma
+          | TypeRecord fields1, TypeRecord fields2 ->
+              let fields1' =
+                List.map
+                  (fun (ARecordFieldType (StellaIdent name, ty')) ->
+                    (name, ty'))
+                  fields1
+              in
+              let fields2' =
+                List.map
+                  (fun (ARecordFieldType (StellaIdent name, ty')) ->
+                    (name, ty'))
+                  fields2
+              in
+              let rec convert (fields1 : (string * typeT) list)
+                  (fields2 : (string * typeT) list)
+                  ((fieldPairs, missingFields, extraFields) :
+                    (typeT * typeT) list * string list * string list) =
+                match fields1 with
+                | (name, ty1) :: fields' -> (
+                    match List.assoc_opt name fields2 with
+                    | Some ty ->
+                        convert fields'
+                          (List.remove_assoc name fields2)
+                          ((ty1, ty) :: fieldPairs, missingFields, extraFields)
+                    | _ ->
+                        convert fields'
+                          (List.remove_assoc name fields2)
+                          (fieldPairs, missingFields, name :: extraFields))
+                | _ ->
+                    ( fieldPairs,
+                      List.concat
+                        [ List.map (fun (a, _) -> a) fields2; missingFields ],
+                      extraFields )
+              in
+              let fieldPairs, missingFields, extraFields =
+                convert fields1' fields2' ([], [], [])
+              in
+              if List.compare_length_with extraFields 0 <> 0 then
+                (* TODO: Version for unify *)
+                raise
+                  (TyExn (UnexpectedRecordFields (extraFields, ty2, ConstUnit)))
+              else if List.compare_length_with missingFields 0 <> 0 then
+                raise
+                  (TyExn (MissingRecordFields (missingFields, ty2, ConstUnit)))
+              else unify' fieldPairs sigma
+          (* | TypeVariant tricky not supported *)
+          | TypeList ty1', TypeList ty2' ->
+              unify' ((ty1', ty2') :: restrictions') sigma
+          | TypeRef ty1', TypeRef ty2' ->
+              unify' ((ty1', ty2') :: restrictions') sigma
+          | _ ->
+              (* TODO: Add unification error *)
+              raise (TyExn (UnexpectedTypeForExpression (ty1, ty2, ConstUnit))))
+      | [] -> sigma
+    in
+    unify' restrictions Fun.id
 
   let rec typecheck (ctx : context) (expr : expr) (ty : typeT) =
     (* print_endline
@@ -1037,6 +1100,12 @@ module Make (Ctx : Context) = struct
         let ctx' = Context.concat [ bindersCtx; ctx ] in
         typecheck ctx' expr' ty
     (* LetRec TODO *)
+    | TypeAbstraction (tys, expr), _ ->
+        let ctx' =
+          List.map (fun (StellaIdent a) -> a) tys
+          |> List.fold_left Context.put_type ctx
+        in
+        typecheck ctx' expr ty
     | LessThan (e1, e2), _ ->
         if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
         else typecheck ctx e1 TypeNat;
@@ -1148,6 +1217,14 @@ module Make (Ctx : Context) = struct
     | Application _, _ ->
         let ty' = infer ctx expr in
         if neq ty' ty then Ctx.unexpected_type ty ty' expr else ()
+    | TypeApplication (expr, tys), _ -> (
+        let ty' = infer ctx expr in
+        match ty' with
+        | TypeForAll (tys', tyRes) ->
+            let tys' = List.map (fun (StellaIdent i) -> i) tys' in
+            let ty'' = apply_type tys tys' tyRes in
+            if neq ty'' ty then Ctx.unexpected_type ty ty'' expr
+        | _ -> raise (TyExn (NotAGenericFunction ty')))
     | DotRecord _, _ ->
         let ty' = infer ctx expr in
         if neq ty' ty then Ctx.unexpected_type ty ty' expr else ()
@@ -1329,6 +1406,12 @@ module Make (Ctx : Context) = struct
         let ctx' = Context.concat [ bindersCtx; ctx ] in
         infer ctx' expr'
     (* | LetRec of patternBinding list * expr TODO *)
+    | TypeAbstraction (tys, expr) ->
+        let ctx' =
+          List.map (fun (StellaIdent a) -> a) tys
+          |> List.fold_left Context.put_type ctx
+        in
+        infer ctx' expr
     | LessThan (e1, e2) ->
         typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat;
@@ -1457,6 +1540,14 @@ module Make (Ctx : Context) = struct
               fresh_ret)
             else raise (TyExn (NotAFunction (tyFun, expr)))
         | _ -> raise (TyExn (NotAFunction (tyFun, expr))))
+    | TypeApplication (expr, tys) -> (
+        let ty' = infer ctx expr in
+        match ty' with
+        | TypeForAll (tys', tyRes) ->
+            let tys' = List.map (fun (StellaIdent i) -> i) tys' in
+            let ty'' = apply_type tys tys' tyRes in
+            ty''
+        | _ -> raise (TyExn (NotAGenericFunction ty')))
     | DotRecord (expr', StellaIdent name) -> (
         let tyRec = infer ctx expr' in
         match tyRec with
@@ -1706,6 +1797,6 @@ let typecheckProgram (AProgram (_, extensions, decls) : program) =
       | _ -> not_implemented "typecheckProgram")
     decls;
   if is_reconstruction then
-    let sigma = unify !restrictions in
+    let sigma = M.unify !restrictions in
     ignore sigma
   else ()

@@ -393,7 +393,7 @@ let test_variant_exceptions () =
   check "throw (<| b = 0 |>) <= Unit" (o |- "throw (<| b = 0 |>)" <= "Unit")
 
 let test_unify () =
-  let unify = Stella.Typecheck.unify in
+  let unify = TC.unify in
   let unify =
    fun (tys : string list) ->
     List.map
@@ -471,7 +471,7 @@ let test_reconstruction () =
     let var = Stella.AbsStella.(TypeVar (StellaIdent (fresh_var ()))) in
     let ctx = Stella.Context.from_var s var in
     typecheck ctx l r;
-    let sigma = Stella.Typecheck.unify !restrictions in
+    let sigma = TC.unify !restrictions in
     check' msg (parse_string_typeT ty) (sigma var)
   in
   let infer_rec (msg : string) (s : string) (ty : string) (l : string) =
@@ -483,7 +483,7 @@ let test_reconstruction () =
     let var = Stella.AbsStella.(TypeVar (StellaIdent (fresh_var ()))) in
     let ctx = Stella.Context.from_var s var in
     infer ctx l |> ignore;
-    let sigma = Stella.Typecheck.unify !restrictions in
+    let sigma = TC.unify !restrictions in
     check' msg (parse_string_typeT ty) (sigma var)
   in
   let both_rec (msg : string) (s : string) (ty : string) (l : string)
