@@ -1100,12 +1100,22 @@ module Make (Ctx : Context) = struct
         let ctx' = Context.concat [ bindersCtx; ctx ] in
         typecheck ctx' expr' ty
     (* LetRec TODO *)
-    | TypeAbstraction (tys, expr), _ ->
-        let ctx' =
-          List.map (fun (StellaIdent a) -> a) tys
-          |> List.fold_left Context.put_type ctx
-        in
-        typecheck ctx' expr ty
+    | TypeAbstraction (tys, expr), TypeForAll (tysP, ty) ->
+        if List.compare_lengths tys tysP <> 0 then
+          Ctx.unexpected_type ty (infer ctx expr) expr
+        else
+          let ctx' =
+            List.map (fun (StellaIdent a) -> a) tys
+            |> List.fold_left Context.put_type ctx
+          in
+          let ty' =
+            List.fold_left2
+              (fun ty (StellaIdent from) _to ->
+                substitute from (TypeVar _to) ty)
+              ty tysP tys
+          in
+          typecheck ctx' expr ty'
+    | TypeAbstraction _, _ -> Ctx.unexpected_type ty (infer ctx expr) expr
     | LessThan (e1, e2), _ ->
         if neq TypeBool ty then Ctx.unexpected_type ty TypeBool expr
         else typecheck ctx e1 TypeNat;
