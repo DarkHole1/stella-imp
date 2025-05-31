@@ -121,3 +121,40 @@ let get_extensions (AProgram (_, extensions, _)) =
   List.concat_map get_extension' extensions
 
 let get_extensions' program = get_extensions program |> Extensions.make
+
+let get_record_fields (fields : recordFieldType list) =
+  List.map get_record_field_type' fields
+
+let get_binders (binders : binding list) = List.map get_binding' binders
+
+let traverse_type (f : typeT -> typeT) = function
+  | TypeAuto -> TypeAuto
+  | TypeFun (tys, ty) -> TypeFun (List.map f tys, f ty)
+  | TypeForAll (idents, ty) -> TypeForAll (idents, f ty)
+  | TypeRec (ident, ty) -> TypeRec (ident, f ty)
+  | TypeSum (ty1, ty2) -> TypeSum (f ty1, f ty2)
+  | TypeTuple tys -> TypeTuple (List.map f tys)
+  | TypeRecord fields ->
+      TypeRecord
+        (List.map
+           (fun (ARecordFieldType (ident, ty)) ->
+             ARecordFieldType (ident, f ty))
+           fields)
+  | TypeVariant fields ->
+      TypeVariant
+        (List.map
+           (fun (AVariantFieldType (ident, ty)) ->
+             AVariantFieldType
+               ( ident,
+                 match ty with
+                 | NoTyping -> NoTyping
+                 | SomeTyping ty -> SomeTyping (f ty) ))
+           fields)
+  | TypeList ty -> TypeList (f ty)
+  | TypeBool -> TypeBool
+  | TypeNat -> TypeNat
+  | TypeUnit -> TypeUnit
+  | TypeTop -> TypeTop
+  | TypeBottom -> TypeBottom
+  | TypeRef ty -> TypeRef (f ty)
+  | TypeVar ident -> TypeVar ident
