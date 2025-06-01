@@ -1,64 +1,123 @@
 open AbsStella
 
 let get_ident (StellaIdent i) = i
+let to_ident i = StellaIdent i
 let get_extension_name (ExtensionName n) = n
+let to_extension_name n = ExtensionName n
 let get_memory_address (MemoryAddress m) = m
+let to_memory_addres m = MemoryAddress m
 
 let get_program (AProgram (language, extensions, decls)) =
   (language, extensions, decls)
 
+let to_program language extensions decls = AProgram (language, extensions, decls)
 let get_program' (AProgram (_, extensions, decls)) = (extensions, decls)
+let to_program' extension decls = AProgram (LanguageCore, extension, decls)
 let get_language LanguageCore = ()
+let to_language () = LanguageCore
 let get_extension (AnExtension extension_names) = extension_names
+let to_extension extension_names = AnExtension extension_names
 
 let get_extension' (AnExtension extension_names) =
   List.map get_extension_name extension_names
 
+let to_extension' extension_names = List.map to_extension_name extension_names
 let get_local_decl (ALocalDecl decl) = decl
+let to_local_decl decl = ALocalDecl decl
 let get_annotation InlineAnnotation = ()
+let to_annotation () = InlineAnnotation
 let get_param_decl (AParamDecl (ident, ty)) = (ident, ty)
+let to_param_decl ident ty = AParamDecl (ident, ty)
 let get_param_decl' (AParamDecl (StellaIdent ident, ty)) = (ident, ty)
+let to_param_decl' ident ty = AParamDecl (StellaIdent ident, ty)
 
 let return_type_to_option = function
   | NoReturnType -> None
   | SomeReturnType ty -> Some ty
 
+let option_to_return_type = function
+  | None -> NoReturnType
+  | Some ty -> SomeReturnType ty
+
+let map_return_type f r =
+  return_type_to_option r |> Option.map f |> option_to_return_type
+
 let throw_type_to_option = function
   | NoThrowType -> None
   | SomeThrowType ty -> Some ty
 
+let option_to_throw_type = function
+  | None -> NoThrowType
+  | Some ty -> SomeThrowType ty
+
+let map_throw_type f t =
+  throw_type_to_option t |> Option.map f |> option_to_throw_type
+
 let get_match_case (AMatchCase (pattern, expr)) = (pattern, expr)
+let to_match_case pattern expr = AMatchCase (pattern, expr)
 
 let optional_typing_to_option = function
   | NoTyping -> None
   | SomeTyping ty -> Some ty
 
+let option_to_optional_typing = function
+  | None -> NoTyping
+  | Some ty -> SomeTyping ty
+
+let map_optional_typing f t =
+  optional_typing_to_option t |> Option.map f |> option_to_optional_typing
+
 let pattern_data_to_option = function
   | NoPatternData -> None
   | SomePatternData data -> Some data
+
+let option_to_pattern_data = function
+  | None -> NoPatternData
+  | Some data -> SomePatternData data
+
+let map_pattern_data f d =
+  pattern_data_to_option d |> Option.map f |> option_to_pattern_data
 
 let expr_data_to_option = function
   | NoExprData -> None
   | SomeExprData data -> Some data
 
+let option_to_expr_data = function
+  | None -> NoExprData
+  | Some data -> SomeExprData data
+
+let map_expr_data f d =
+  expr_data_to_option d |> Option.map f |> option_to_expr_data
+
 let get_labelled_pattern (ALabelledPattern (ident, pattern)) = (ident, pattern)
+let to_labelled_pattern ident pattern = ALabelledPattern (ident, pattern)
 
 let get_labelled_pattern' (ALabelledPattern (StellaIdent ident, pattern)) =
   (ident, pattern)
 
+let to_labelled_pattern' ident pattern =
+  ALabelledPattern (StellaIdent ident, pattern)
+
 let get_binding (ABinding (ident, expr)) = (ident, expr)
+let to_binding ident expr = ABinding (ident, expr)
 let get_binding' (ABinding (StellaIdent ident, expr)) = (ident, expr)
+let to_binding' ident expr = ABinding (StellaIdent ident, expr)
 let get_variant_field_type (AVariantFieldType (ident, ty)) = (ident, ty)
+let to_variant_field_type ident ty = AVariantFieldType (ident, ty)
 
 let get_variant_field_type' (AVariantFieldType (StellaIdent ident, ty)) =
   (ident, ty)
 
+let to_variant_field_type' ident ty = AVariantFieldType (StellaIdent ident, ty)
 let get_record_field_type (ARecordFieldType (ident, ty)) = (ident, ty)
+let to_record_field_type ident ty = ARecordFieldType (ident, ty)
 
 let get_record_field_type' (ARecordFieldType (StellaIdent ident, ty)) =
   (ident, ty)
 
+let to_record_field_type' ident ty = ARecordFieldType (StellaIdent ident, ty)
 let get_typing (ATyping (expr, ty)) = (expr, ty)
+let to_typing expr ty = ATyping (expr, ty)
 
 module Extensions = struct
   type t = string list
@@ -144,11 +203,7 @@ let traverse_type (f : typeT -> typeT) = function
       TypeVariant
         (List.map
            (fun (AVariantFieldType (ident, ty)) ->
-             AVariantFieldType
-               ( ident,
-                 match ty with
-                 | NoTyping -> NoTyping
-                 | SomeTyping ty -> SomeTyping (f ty) ))
+             AVariantFieldType (ident, map_optional_typing f ty))
            fields)
   | TypeList ty -> TypeList (f ty)
   | TypeBool -> TypeBool
