@@ -186,7 +186,9 @@ let get_record_fields (fields : recordFieldType list) =
 
 let get_binders (binders : binding list) = List.map get_binding' binders
 
-let traverse_type (f : typeT -> typeT) = function
+let rec traverse_type (f : (typeT -> typeT) -> typeT -> typeT) =
+  let f = f (traverse_type f) in
+  function
   | TypeAuto -> TypeAuto
   | TypeFun (tys, ty) -> TypeFun (List.map f tys, f ty)
   | TypeForAll (idents, ty) -> TypeForAll (idents, f ty)
@@ -213,6 +215,76 @@ let traverse_type (f : typeT -> typeT) = function
   | TypeBottom -> TypeBottom
   | TypeRef ty -> TypeRef (f ty)
   | TypeVar ident -> TypeVar ident
+
+let rec traverse_expr (f : (expr -> expr) -> expr -> expr) =
+  let f = f (traverse_expr f) in
+  function
+  | Sequence (e1, e2) -> Sequence (f e1, f e2)
+  | Assign (e1, e2) -> Assign (f e1, f e2)
+  | If (e1, e2, e3) -> If (f e1, f e2, f e3)
+  | Let (patterns, expr) -> Let (patterns, f expr)
+  | LetRec (patterns, expr) -> LetRec (patterns, f expr)
+  | TypeAbstraction (idents, expr) -> TypeAbstraction (idents, f expr)
+  | LessThan (e1, e2) -> LessThan (f e1, f e2)
+  | LessThanOrEqual (e1, e2) -> LessThanOrEqual (f e1, f e2)
+  | GreaterThan (e1, e2) -> GreaterThan (f e1, f e2)
+  | GreaterThanOrEqual (e1, e2) -> GreaterThanOrEqual (f e1, f e2)
+  | Equal (e1, e2) -> Equal (f e1, f e2)
+  | NotEqual (e1, e2) -> NotEqual (f e1, f e2)
+  | TypeAsc (expr, ty) -> TypeAsc (f expr, ty)
+  | TypeCast (expr, ty) -> TypeAsc (f expr, ty)
+  | Abstraction (params, expr) -> Abstraction (params, f expr)
+  | Variant (ident, exprData) -> Variant (ident, map_expr_data f exprData)
+  | Match (expr, cases) ->
+      Match
+        ( f expr,
+          List.map
+            (fun (AMatchCase (pattern, expr)) -> AMatchCase (pattern, f expr))
+            cases )
+  | List exprs -> List (List.map f exprs)
+  | Add (e1, e2) -> Add (f e1, f e2)
+  | Subtract (e1, e2) -> Subtract (f e1, f e2)
+  | LogicOr (e1, e2) -> LogicOr (f e1, f e2)
+  | Multiply (e1, e2) -> Multiply (f e1, f e2)
+  | Divide (e1, e2) -> Divide (f e1, f e2)
+  | LogicAnd (e1, e2) -> LogicAnd (f e1, f e2)
+  | Ref expr -> Ref (f expr)
+  | Deref expr -> Deref (f expr)
+  | Application (expr, exprs) -> Application (f expr, List.map f exprs)
+  | TypeApplication (expr, tys) -> TypeApplication (f expr, tys)
+  | DotRecord (expr, ident) -> DotRecord (f expr, ident)
+  | DotTuple (expr, offset) -> DotTuple (f expr, offset)
+  | Tuple exprs -> Tuple (List.map f exprs)
+  | Record bindings ->
+      Record
+        (List.map
+           (fun (ABinding (ident, expr)) -> ABinding (ident, f expr))
+           bindings)
+  | ConsList (e1, e2) -> ConsList (f e1, f e2)
+  | Head expr -> Head (f expr)
+  | IsEmpty expr -> IsEmpty (f expr)
+  | Tail expr -> Tail (f expr)
+  | Throw expr -> Throw (f expr)
+  | TryCatch (e1, pattern, e2) -> TryCatch (f e1, pattern, f e2)
+  | TryWith (e1, e2) -> TryWith (f e1, f e2)
+  | TryCastAs (e1, ty, pattern, e2, e3) -> TryCastAs (f e1, ty, pattern, e2, e3)
+  | Inl expr -> Inl (f expr)
+  | Inr expr -> Inr (f expr)
+  | Succ expr -> Succ (f expr)
+  | LogicNot expr -> LogicNot (f expr)
+  | Pred expr -> Pred (f expr)
+  | IsZero expr -> IsZero (f expr)
+  | Fix expr -> Fix (f expr)
+  | NatRec (e1, e2, e3) -> NatRec (f e1, f e2, f e3)
+  | Fold (ty, expr) -> Fold (ty, f expr)
+  | Unfold (ty, expr) -> Unfold (ty, f expr)
+  | Panic -> Panic
+  | ConstTrue -> ConstTrue
+  | ConstFalse -> ConstFalse
+  | ConstUnit -> ConstUnit
+  | ConstInt n -> ConstInt n
+  | ConstMemory m -> ConstMemory m
+  | Var name -> Var name
 
 let not_implemented s = raise (Failure ("Not implemented: " ^ s))
 

@@ -445,151 +445,35 @@ let rec check_type (ctx : context) (ty : typeT) =
       if Context.has_type ctx name then () else undefined_type_variable ty
   | _ -> ()
 
-let auto_fresh (fresh_var : unit -> string) (ctx : context) : context =
-  let rec auto_fresh' = function
-    | TypeAuto -> TypeVar (StellaIdent (fresh_var ()))
-    | TypeFun (tys, ty) -> TypeFun (List.map auto_fresh' tys, auto_fresh' ty)
-    | TypeForAll (idents, ty) -> TypeForAll (idents, auto_fresh' ty)
-    | TypeRec (ident, ty) -> TypeRec (ident, auto_fresh' ty)
-    | TypeSum (tyL, tyR) -> TypeSum (auto_fresh' tyL, auto_fresh' tyR)
-    | TypeTuple tys -> TypeTuple (List.map auto_fresh' tys)
-    | TypeRecord fields ->
-        TypeRecord
-          (List.map
-             (fun (ARecordFieldType (name, ty)) ->
-               ARecordFieldType (name, auto_fresh' ty))
-             fields)
-    | TypeVariant fields ->
-        TypeVariant
-          (List.map
-             (fun (AVariantFieldType (name, optionalTyping)) ->
-               AVariantFieldType
-                 ( name,
-                   match optionalTyping with
-                   | SomeTyping ty -> SomeTyping (auto_fresh' ty)
-                   | x -> x ))
-             fields)
-    | TypeList ty -> TypeList (auto_fresh' ty)
-    | TypeRef ty -> TypeRef (auto_fresh' ty)
-    | ty -> ty
-  in
-  Context.map (fun (name, ty) -> (name, auto_fresh' ty)) ctx
-
 let rec fresh_decls (fresh_var : unit -> string) (decls : decl list) : decl list
     =
-  let rec fresh_type = function
-    | TypeAuto -> TypeVar (StellaIdent (fresh_var ()))
-    | TypeFun (tys, ty) -> TypeFun (List.map fresh_type tys, fresh_type ty)
-    | TypeForAll (idents, ty) -> TypeForAll (idents, fresh_type ty)
-    | TypeRec (ident, ty) -> TypeRec (ident, fresh_type ty)
-    | TypeSum (tyL, tyR) -> TypeSum (fresh_type tyL, fresh_type tyR)
-    | TypeTuple tys -> TypeTuple (List.map fresh_type tys)
-    | TypeRecord fields ->
-        TypeRecord
-          (List.map
-             (fun (ARecordFieldType (name, ty)) ->
-               ARecordFieldType (name, fresh_type ty))
-             fields)
-    | TypeVariant fields ->
-        TypeVariant
-          (List.map
-             (fun (AVariantFieldType (name, optionalTyping)) ->
-               AVariantFieldType
-                 ( name,
-                   match optionalTyping with
-                   | SomeTyping ty -> SomeTyping (fresh_type ty)
-                   | x -> x ))
-             fields)
-    | TypeList ty -> TypeList (fresh_type ty)
-    | TypeRef ty -> TypeRef (fresh_type ty)
-    | ty -> ty
+  let fresh_var' () = StellaIdent (fresh_var ()) in
+  let fresh_type =
+    let rec fresh_type' (traverse : typeT -> typeT) = function
+      | TypeAuto -> TypeVar (fresh_var' ())
+      | ty -> traverse ty
+    in
+    traverse_type fresh_type'
   in
   let fresh_params =
     List.map (fun (AParamDecl (ident, ty)) -> AParamDecl (ident, fresh_type ty))
   in
-  let fresh_return = function
-    | SomeReturnType ty -> SomeReturnType (fresh_type ty)
-    | NoReturnType -> NoReturnType
-  in
-  let fresh_throws = function
-    | SomeThrowType ty -> SomeThrowType (List.map fresh_type ty)
-    | NoThrowType -> NoThrowType
-  in
-  let rec fresh_expr : expr -> expr = function
-    | Sequence (e1, e2) -> Sequence (fresh_expr e1, fresh_expr e2)
-    | Assign (e1, e2) -> Assign (fresh_expr e1, fresh_expr e2)
-    | If (e1, e2, e3) -> If (fresh_expr e1, fresh_expr e2, fresh_expr e3)
-    | Let (patterns, expr) ->
-        (* I don't know what to do with patterns in let *)
-        Let (patterns, fresh_expr expr)
-    | LetRec (patterns, expr) -> LetRec (patterns, fresh_expr expr)
-    | TypeAbstraction (idents, expr) -> TypeAbstraction (idents, fresh_expr expr)
-    | LessThan (e1, e2) -> LessThan (fresh_expr e1, fresh_expr e2)
-    | LessThanOrEqual (e1, e2) -> LessThanOrEqual (fresh_expr e1, fresh_expr e2)
-    | GreaterThan (e1, e2) -> GreaterThan (fresh_expr e1, fresh_expr e2)
-    | GreaterThanOrEqual (e1, e2) ->
-        GreaterThanOrEqual (fresh_expr e1, fresh_expr e2)
-    | Equal (e1, e2) -> Equal (fresh_expr e1, fresh_expr e2)
-    | NotEqual (e1, e2) -> NotEqual (fresh_expr e1, fresh_expr e2)
-    | TypeAsc (expr, ty) -> TypeAsc (fresh_expr expr, fresh_type ty)
-    | TypeCast (expr, ty) -> TypeAsc (fresh_expr expr, fresh_type ty)
-    | Abstraction (params, expr) ->
-        Abstraction (fresh_params params, fresh_expr expr)
-    | Variant (ident, exprData) ->
-        Variant
-          ( ident,
-            match exprData with
-            | SomeExprData expr -> SomeExprData (fresh_expr expr)
-            | NoExprData -> NoExprData )
-    | Match (expr, cases) ->
-        Match
-          ( fresh_expr expr,
-            List.map
-              (fun (AMatchCase (pattern, expr)) ->
-                AMatchCase (pattern, fresh_expr expr))
-              cases )
-    | List exprs -> List (List.map fresh_expr exprs)
-    | Add (e1, e2) -> Add (fresh_expr e1, fresh_expr e2)
-    | Subtract (e1, e2) -> Subtract (fresh_expr e1, fresh_expr e2)
-    | LogicOr (e1, e2) -> LogicOr (fresh_expr e1, fresh_expr e2)
-    | Multiply (e1, e2) -> Multiply (fresh_expr e1, fresh_expr e2)
-    | Divide (e1, e2) -> Divide (fresh_expr e1, fresh_expr e2)
-    | LogicAnd (e1, e2) -> LogicAnd (fresh_expr e1, fresh_expr e2)
-    | Ref expr -> Ref (fresh_expr expr)
-    | Deref expr -> Deref (fresh_expr expr)
-    | Application (expr, exprs) ->
-        Application (fresh_expr expr, List.map fresh_expr exprs)
-    | TypeApplication (expr, tys) ->
-        TypeApplication (fresh_expr expr, List.map fresh_type tys)
-    | DotRecord (expr, ident) -> DotRecord (fresh_expr expr, ident)
-    | DotTuple (expr, offset) -> DotTuple (fresh_expr expr, offset)
-    | Tuple exprs -> Tuple (List.map fresh_expr exprs)
-    | Record bindings ->
-        Record
-          (List.map
-             (fun (ABinding (ident, expr)) -> ABinding (ident, fresh_expr expr))
-             bindings)
-    | ConsList (e1, e2) -> ConsList (fresh_expr e1, fresh_expr e2)
-    | Head expr -> Head (fresh_expr expr)
-    | IsEmpty expr -> IsEmpty (fresh_expr expr)
-    | Tail expr -> Tail (fresh_expr expr)
-    | Throw expr -> Throw (fresh_expr expr)
-    | TryCatch (e1, pattern, e2) ->
-        TryCatch (fresh_expr e1, pattern, fresh_expr e2)
-    | TryWith (e1, e2) -> TryWith (fresh_expr e1, fresh_expr e2)
-    | TryCastAs (e1, ty, pattern, e2, e3) ->
-        TryCastAs (fresh_expr e1, fresh_type ty, pattern, e2, e3)
-    | Inl expr -> Inl (fresh_expr expr)
-    | Inr expr -> Inr (fresh_expr expr)
-    | Succ expr -> Succ (fresh_expr expr)
-    | LogicNot expr -> LogicNot (fresh_expr expr)
-    | Pred expr -> Pred (fresh_expr expr)
-    | IsZero expr -> IsZero (fresh_expr expr)
-    | Fix expr -> Fix (fresh_expr expr)
-    | NatRec (e1, e2, e3) -> NatRec (fresh_expr e1, fresh_expr e2, fresh_expr e3)
-    | Fold (ty, expr) -> Fold (fresh_type ty, fresh_expr expr)
-    | Unfold (ty, expr) -> Fold (fresh_type ty, fresh_expr expr)
-    | expr -> expr
+  let fresh_return = map_return_type fresh_type in
+  let fresh_throws = map_throw_type (List.map fresh_type) in
+  let fresh_expr =
+    let fresh_expr' (traverse : expr -> expr) = function
+      | TypeAsc (expr, ty) -> TypeAsc (traverse expr, fresh_type ty)
+      | TypeCast (expr, ty) -> TypeCast (traverse expr, fresh_type ty)
+      | Abstraction (params, expr) -> Abstraction (fresh_params params, expr)
+      | TypeApplication (expr, tys) ->
+          TypeApplication (expr, List.map fresh_type tys)
+      | TryCastAs (e1, ty, pat, e2, e3) ->
+          TryCastAs (traverse e1, fresh_type ty, pat, traverse e2, traverse e3)
+      | Fold (ty, expr) -> Fold (fresh_type ty, traverse expr)
+      | Unfold (ty, expr) -> Unfold (fresh_type ty, traverse expr)
+      | expr -> traverse expr
+    in
+    traverse_expr fresh_expr'
   in
   List.map
     (function
