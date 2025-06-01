@@ -39,8 +39,8 @@ let main () =
         end_pos.pos_lnum
         (end_pos.pos_cnum - end_pos.pos_bol + 1);
       exit 1
-  | Typecheck.TyExn err ->
-      print_endline (Typecheck.show_error err);
+  | Errors.TyExn err ->
+      print_endline (Errors.show err);
       exit 2
 ;;
 

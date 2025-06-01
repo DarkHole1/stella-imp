@@ -213,3 +213,13 @@ let traverse_type (f : typeT -> typeT) = function
   | TypeBottom -> TypeBottom
   | TypeRef ty -> TypeRef (f ty)
   | TypeVar ident -> TypeVar ident
+
+let not_implemented s = raise (Failure ("Not implemented: " ^ s))
+
+let pad_doc (pad_size : int) (d : PrintStella.doc) =
+ fun buf i -> d buf (i + pad_size)
+
+let pad_prt (pad_size : int) (prt : int -> 'a -> PrintStella.doc) =
+ fun i e -> prt i e |> pad_doc pad_size
+
+let default_pad (prt : int -> 'a -> PrintStella.doc) = pad_prt 4 prt

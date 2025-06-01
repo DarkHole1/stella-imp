@@ -1,200 +1,6 @@
 open AbsStella
-
-type tyError =
-  | MissingMain
-  | UndefinedVariable of string * expr
-  | UnexpectedTypeForExpression of typeT * typeT * expr
-  | NotAFunction of typeT * expr
-  | NotATuple of typeT * expr
-  | NotARecord of typeT * expr
-  | NotAList of typeT * expr
-  | UnexpectedLambda of typeT * expr
-  | UnexpectedTypeForParameter of typeT * typeT * paramDecl
-  | UnexpectedTuple of typeT * expr
-  | UnexpectedRecord of typeT * expr
-  | UnexpectedVariant of typeT * expr
-  | UnexpectedList of typeT * expr
-  | UnexpectedInjection of typeT * expr
-  | MissingRecordFields of string list * typeT * expr
-  | UnexpectedRecordFields of string list * typeT * expr
-  | UnexpectedFieldAccess of typeT * string * expr
-  | UnexpectedVariantLabel of typeT * string * expr
-  | TupleIndexOutOfBounds of typeT * int * expr
-  | UnexpectedTupleLength of int * int * expr
-  | AmbiguousSumType of expr
-  | AmbiguousVariantType of expr
-  | AmbiguousList of expr
-  | IllegalEmptyMatching of expr
-  | NonexhaustiveMatchPatterns of expr * expr
-  | UnexpectedPatternForType of pattern * typeT
-  | DuplicateRecordFields of string list * expr
-  | DuplicateRecordTypeFields of string list * typeT
-  | DuplicateVariantTypeFields of string list * typeT
-  | ExceptionTypeNotDeclared of expr
-  | AmbiguousThrowType of expr
-  | AmbiguousReferenceType of expr
-  | AmbiguousPanicType of expr
-  | NotAReference of typeT * expr
-  | UnexpectedMemoryAddress of typeT * expr
-  | UnexpectedSubtype of typeT * typeT * expr
-  | OccursCheckInfiniteType of typeT
-  | NotAGenericFunction of typeT
-  | IncorrectNumberOfTypeArguments of typeT * typeT list
-  | UndefinedTypeVariable of typeT
-[@@deriving show]
-
-exception TyExn of tyError
-
-let not_implemented s = raise (Failure ("Not implemented: " ^ s))
-
-let pad_doc (pad_size : int) (d : PrintStella.doc) =
- fun buf i -> d buf (i + pad_size)
-
-let pad_prt (pad_size : int) (prt : int -> 'a -> PrintStella.doc) =
- fun i e -> prt i e |> pad_doc pad_size
-
-let default_pad (prt : int -> 'a -> PrintStella.doc) = pad_prt 4 prt
-
-let show_error (err : tyError) : string =
-  let prtExpr = PrintStella.printTree (default_pad PrintStella.prtExpr) in
-  let prtTypeT = PrintStella.printTree (default_pad PrintStella.prtTypeT) in
-  let prtPattern = PrintStella.printTree (default_pad PrintStella.prtPattern) in
-  match err with
-  | MissingMain -> "ERROR_MISSING_MAIN\n  в программе отсутствует функция main"
-  | UndefinedVariable (name, expr) ->
-      "ERROR_UNDEFINED_VARIABLE\n  неизвестная переменная\n    " ^ name
-      ^ "\n  в выражении\n    " ^ prtExpr expr
-  | UnexpectedTypeForExpression (ty1, ty2, expr) ->
-      "ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION\n  ожидался тип\n    "
-      ^ prtTypeT ty1 ^ "\n  но получен тип\n    " ^ prtTypeT ty2
-      ^ "\n  в выражении\n    " ^ prtExpr expr
-  | NotAFunction (ty, expr) ->
-      "ERROR_NOT_A_FUNCTION\n  ожидалась функция в выражении\n    "
-      ^ prtExpr expr ^ "\n  но получен тип\n    " ^ prtTypeT ty
-  | NotATuple (ty, expr) ->
-      "ERROR_NOT_A_TUPLE\n  ожидался кортёж в выражении\n    " ^ prtExpr expr
-      ^ "\n  но получен тип\n    " ^ prtTypeT ty
-  | NotARecord (ty, expr) ->
-      "ERROR_NOT_A_RECORD\n  ожидалась запись в выражении\n    " ^ prtExpr expr
-      ^ "\n  но получен тип\n    " ^ prtTypeT ty
-  | NotAList (ty, expr) ->
-      "ERROR_NOT_A_LIST\n  ожидался список в выражении\n    " ^ prtExpr expr
-      ^ "\n  но получен тип\n    " ^ prtTypeT ty
-  | UnexpectedLambda (ty, expr) ->
-      "ERROR_UNEXPECTED_LAMBDA\n  ожидался тип\n    " ^ prtTypeT ty
-      ^ "\n  но получена лямбда в выражении\n    " ^ prtExpr expr
-  | UnexpectedTypeForParameter (ty1, ty2, AParamDecl (StellaIdent name, _)) ->
-      "ERROR_UNEXPECTED_TYPE_FOR_PARAMETER\n  для параметра\n    " ^ name
-      ^ "\n  ожидался тип\n    " ^ prtTypeT ty1 ^ "\n  но получен тип\n    "
-      ^ prtTypeT ty2
-  | UnexpectedTuple (ty, expr) ->
-      "ERROR_UNEXPECTED_TUPLE\n  ожидался тип\n    " ^ prtTypeT ty
-      ^ "\n  но получен кортёж в выражении\n    " ^ prtExpr expr
-  | UnexpectedRecord (ty, expr) ->
-      "ERROR_UNEXPECTED_RECORD\n  ожидался тип\n    " ^ prtTypeT ty
-      ^ "\n  но получена запись в выражении\n    " ^ prtExpr expr
-  | UnexpectedVariant (ty, expr) ->
-      "ERROR_UNEXPECTED_VARIANT\n  ожидался тип\n    " ^ prtTypeT ty
-      ^ "\n  но получен вариант в выражении\n    " ^ prtExpr expr
-  | UnexpectedList (ty, expr) ->
-      "ERROR_UNEXPECTED_LIST\n  ожидался тип\n    " ^ prtTypeT ty
-      ^ "\n  но получен список в выражении\n    " ^ prtExpr expr
-  | UnexpectedInjection (ty, expr) ->
-      "ERROR_UNEXPECTED_INJECTION\n  ожидался тип\n    " ^ prtTypeT ty
-      ^ "\n  но получена инъекция в выражении\n    " ^ prtExpr expr
-  | MissingRecordFields (missing, ty, expr) ->
-      "ERROR_MISSING_RECORD_FIELDS\n  отсуствуют поля\n    "
-      ^ String.concat "\n    " missing
-      ^ "\n  для типа\n    " ^ prtTypeT ty ^ "\n  в выражении\n    "
-      ^ prtExpr expr
-  | UnexpectedRecordFields (extra, ty, expr) ->
-      "ERROR_UNEXPECTED_RECORD_FIELDS\n  присутствуют лишние поля\n    "
-      ^ String.concat "\n    " extra
-      ^ "\n  для типа\n    " ^ prtTypeT ty ^ "\n  в выражении\n    "
-      ^ prtExpr expr
-  | UnexpectedFieldAccess (ty, field, expr) ->
-      "ERROR_UNEXPECTED_FIELD_ACCESS\n  в типе\n    " ^ prtTypeT ty
-      ^ "\n  отсутствует поле\n    " ^ field ^ "\n  в выражении\n    "
-      ^ prtExpr expr
-  | UnexpectedVariantLabel (ty, variant, expr) ->
-      "ERROR_UNEXPECTED_VARIANT_LABEL\n  в типе\n    " ^ prtTypeT ty
-      ^ "\n  отсутствует вариант\n    " ^ variant ^ "\n  в выражении\n    "
-      ^ prtExpr expr
-  | TupleIndexOutOfBounds (ty, index, expr) ->
-      "ERROR_TUPLE_INDEX_OUT_OF_BOUNDS\n  индекс\n    " ^ Int.to_string index
-      ^ "\n  выходит за пределы тип\n    " ^ prtTypeT ty
-      ^ "\n  в выражении\n    " ^ prtExpr expr
-  | UnexpectedTupleLength (len1, len2, expr) ->
-      "ERROR_UNEXPECTED_TUPLE_LENGTH\n  ожидался кортёж длиной\n    "
-      ^ Int.to_string len1 ^ "\n  но получен кортёж длиной\n    "
-      ^ Int.to_string len2 ^ "\n  в выражении\n    " ^ prtExpr expr
-  | AmbiguousSumType expr ->
-      "ERROR_AMBIGUOUS_SUM_TYPE\n\
-      \  невозможно определить тип инъекции в выражении\n\
-      \    " ^ prtExpr expr
-  | AmbiguousVariantType expr ->
-      "ERROR_AMBIGUOUS_VARIANT_TYPE\n\
-      \  невозможно определить тип варианта в выражении\n\
-      \    " ^ prtExpr expr
-  | AmbiguousList expr ->
-      "ERROR_AMBIGUOUS_LIST\n\
-      \  невозможно определить тип списка в выражении\n\
-      \    " ^ prtExpr expr
-  | IllegalEmptyMatching expr ->
-      "ERROR_ILLEGAL_EMPTY_MATCHING\n\
-      \  match-выражение с пустым списком альтернатив\n\
-      \    " ^ prtExpr expr
-  | NonexhaustiveMatchPatterns (expr_unmatched, expr_full) ->
-      "ERROR_NONEXHAUSTIVE_MATCH_PATTERNS\n  выражение\n    "
-      ^ prtExpr expr_full ^ "\n  не покрывает значение\n    "
-      ^ prtExpr expr_unmatched
-  | UnexpectedPatternForType (pat, ty) ->
-      "ERROR_UNEXPECTED_PATTERN_FOR_TYPE\n  образец\n    " ^ prtPattern pat
-      ^ "\n  не соответствует типу\n    " ^ prtTypeT ty
-  | DuplicateRecordFields (dup, expr) ->
-      "ERROR_DUPLICATE_RECORD_FIELDS\n  в выражении\n    " ^ prtExpr expr
-      ^ "\n  дублируются поля\n    " ^ String.concat "\n    " dup
-  | DuplicateRecordTypeFields (dup, ty) ->
-      "ERROR_DUPLICATE_RECORD_TYPE_FIELDS\n  в типе\n    " ^ prtTypeT ty
-      ^ "\n  дублируются поля\n    " ^ String.concat "\n    " dup
-  | DuplicateVariantTypeFields (dup, ty) ->
-      "ERROR_DUPLICATE_VARIANT_TYPE_FIELDS\n  в типе\n    " ^ prtTypeT ty
-      ^ "\n  дублируются варианты\n    " ^ String.concat "\n    " dup
-  | ExceptionTypeNotDeclared expr ->
-      "ERROR_EXCEPTION_TYPE_NOT_DECLARED\n  в выражении\n    " ^ prtExpr expr
-      ^ "\n  используются ошибки, но их тип не определён в программе"
-  | AmbiguousThrowType expr ->
-      "ERROR_AMBIGUOUS_THROW_TYPE\n  в выражении\n    " ^ prtExpr expr
-      ^ "\n  невозможно определить тип throw"
-  | AmbiguousReferenceType expr ->
-      "ERROR_AMBIGUOUS_REFERENCE_TYPE\n  в выражении\n    " ^ prtExpr expr
-      ^ "\n  невозможно определить тип адреса памяти"
-  | AmbiguousPanicType expr ->
-      "ERROR_AMBIGUOUS_PANIC_TYPE\n  в выражении\n    " ^ prtExpr expr
-      ^ "\n  невозможно определить тип ошибки"
-  | NotAReference (ty, expr) ->
-      "ERROR_NOT_A_REFERENCE\n  ожидалась ссылка в выражении\n    "
-      ^ prtExpr expr ^ "\n  но получен тип\n    " ^ prtTypeT ty
-  | UnexpectedMemoryAddress (ty, expr) ->
-      "ERROR_UNEXPECTED_MEMORY_ADDRESS\n  ожидался тип\n    " ^ prtTypeT ty
-      ^ "\n  но получен адрес памяти в выражении\n    " ^ prtExpr expr
-  | UnexpectedSubtype (ty1, ty2, expr) ->
-      "ERROR_UNEXPECTED_SUBTYPE\n  ожидался подтип типа\n    " ^ prtTypeT ty1
-      ^ "\n  но получен тип\n    " ^ prtTypeT ty2 ^ "\n  в выражении\n    "
-      ^ prtExpr expr
-  | OccursCheckInfiniteType ty ->
-      "ERROR_OCCURS_CHECK_INFINITE_TYPE\n\
-      \  в результате унификации возник бесконечный тип\n\
-      \   " ^ prtTypeT ty
-  | NotAGenericFunction ty ->
-      "ERROR_NOT_A_GENERIC_FUNCTION\n  тип\n    " ^ prtTypeT ty
-      ^ "\n не является обобщённым"
-  | IncorrectNumberOfTypeArguments (ty, tys) ->
-      "ERROR_INCORRECT_NUMBER_OF_TYPE_ARGUMENTS\n  типа\n    " ^ prtTypeT ty
-      ^ "\n  применено недостаточное количество аргументов"
-  | UndefinedTypeVariable ty ->
-      "ERROR_UNDEFINED_TYPE_VARIABLE\n  переменная\n    " ^ prtTypeT ty
-      ^ "\n  не определена"
+open Utils
+open Errors
 
 type context = Context.t
 
@@ -309,9 +115,7 @@ let rec subtype (ty1 : typeT) (ty2 : typeT) : bool =
   | _ -> false
 
 let check_main (ctx : context) : unit =
-  match Context.get ctx "main" with
-  | None -> raise (TyExn MissingMain)
-  | _ -> ()
+  match Context.get ctx "main" with None -> missing_main () | _ -> ()
 
 let rec synthesis_by_type (ty : typeT) : expr =
   match ty with
@@ -526,33 +330,33 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
   | PatternCastAs of pattern * typeT
   *)
   | PatternAsc (p', ty'), _ ->
-      if neq ty' ty then raise (TyExn (UnexpectedPatternForType (p, ty)))
+      if neq ty' ty then unexpected_pattern_for_type p ty
       else deconstruct_pattern_binder p' ty
   | PatternVariant (StellaIdent name, patternData), TypeVariant fieldTypes -> (
       let rec find fieldTypes =
         match fieldTypes with
         | AVariantFieldType (StellaIdent name', typing) :: fieldTypes' ->
             if name = name' then typing else find fieldTypes'
-        | _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+        | _ -> unexpected_pattern_for_type p ty
       in
       let typing = find fieldTypes in
       match (typing, patternData) with
       | SomeTyping ty', SomePatternData p' -> deconstruct_pattern_binder p' ty'
       | NoTyping, NoPatternData -> Context.empty
-      | _ -> raise (TyExn (UnexpectedPatternForType (p, ty))))
-  | PatternVariant _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+      | _ -> unexpected_pattern_for_type p ty)
+  | PatternVariant _, _ -> unexpected_pattern_for_type p ty
   | PatternInl p', TypeSum (tyL, _) -> deconstruct_pattern_binder p' tyL
-  | PatternInl _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternInl _, _ -> unexpected_pattern_for_type p ty
   | PatternInr p', TypeSum (_, tyR) -> deconstruct_pattern_binder p' tyR
-  | PatternInr _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternInr _, _ -> unexpected_pattern_for_type p ty
   | PatternTuple ps, TypeTuple types ->
       if List.compare_lengths ps types <> 0 then
-        raise (TyExn (UnexpectedPatternForType (p, ty)))
+        unexpected_pattern_for_type p ty
       else
         List.combine ps types
         |> List.map (fun (p', ty') -> deconstruct_pattern_binder p' ty')
         |> Context.concat
-  | PatternTuple _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternTuple _, _ -> unexpected_pattern_for_type p ty
   | PatternRecord lps, TypeRecord ftys ->
       (* TODO Check fields *)
       let types =
@@ -565,25 +369,25 @@ let rec deconstruct_pattern_binder (p : pattern) (ty : typeT) : context =
           List.assoc name types |> deconstruct_pattern_binder p')
         lps
       |> Context.concat
-  | PatternRecord _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternRecord _, _ -> unexpected_pattern_for_type p ty
   | PatternList ps, TypeList ty' ->
       List.map (fun p' -> deconstruct_pattern_binder p' ty') ps
       |> Context.concat
-  | PatternList _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternList _, _ -> unexpected_pattern_for_type p ty
   | PatternCons (p1, p2), TypeList ty' ->
       Context.concat
         [ deconstruct_pattern_binder p1 ty'; deconstruct_pattern_binder p2 ty ]
-  | PatternCons _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternCons _, _ -> unexpected_pattern_for_type p ty
   | PatternFalse, TypeBool -> Context.empty
-  | PatternFalse, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternFalse, _ -> unexpected_pattern_for_type p ty
   | PatternTrue, TypeBool -> Context.empty
-  | PatternTrue, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternTrue, _ -> unexpected_pattern_for_type p ty
   | PatternUnit, TypeUnit -> Context.empty
-  | PatternUnit, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternUnit, _ -> unexpected_pattern_for_type p ty
   | PatternInt _, TypeNat -> Context.empty
-  | PatternInt _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternInt _, _ -> unexpected_pattern_for_type p ty
   | PatternSucc p', TypeNat -> deconstruct_pattern_binder p' TypeNat
-  | PatternSucc _, _ -> raise (TyExn (UnexpectedPatternForType (p, ty)))
+  | PatternSucc _, _ -> unexpected_pattern_for_type p ty
   | PatternVar (StellaIdent name), _ -> Context.from_var name ty
   | _, _ -> not_implemented "deconstruct_pattern_binder"
 
@@ -616,7 +420,7 @@ let rec check_type (ctx : context) (ty : typeT) =
         |> find_dup
       in
       if List.compare_length_with dup 0 > 0 then
-        raise (TyExn (DuplicateRecordTypeFields (dup, ty)))
+        duplicate_record_type_fields dup ty
       else
         List.map (fun (ARecordFieldType (_, ty)) -> ty) fieldTypes
         |> List.iter (check_type ctx)
@@ -628,7 +432,7 @@ let rec check_type (ctx : context) (ty : typeT) =
         |> find_dup
       in
       if List.compare_length_with dup 0 > 0 then
-        raise (TyExn (DuplicateVariantTypeFields (dup, ty)))
+        duplicate_variant_type_fields dup ty
       else
         List.filter_map
           (fun (AVariantFieldType (_, typing)) ->
@@ -638,8 +442,7 @@ let rec check_type (ctx : context) (ty : typeT) =
   | TypeList ty -> check_type ctx ty
   | TypeRef ty -> check_type ctx ty
   | TypeVar (StellaIdent name) ->
-      if Context.has_type ctx name then ()
-      else raise (TyExn (UndefinedTypeVariable ty))
+      if Context.has_type ctx name then () else undefined_type_variable ty
   | _ -> ()
 
 let auto_fresh (fresh_var : unit -> string) (ctx : context) : context =
@@ -888,7 +691,7 @@ let check_recur (var : string) (_in : typeT) : bool =
   check_recur' _in
 
 module type Context = sig
-  val ambiguous : exn -> typeT
+  val ambiguous : (unit -> typeT) -> typeT
   val exception_type : typeT option
   val is_subtyping : bool
   val eq : typeT -> typeT -> bool
@@ -955,8 +758,7 @@ module Make (Ctx : Context) = struct
   let apply_type (tys : typeT list) (names : string list) (ty : typeT) : typeT =
     let names' = List.map (fun x -> StellaIdent x) names in
     if List.compare_lengths tys names <> 0 then
-      raise
-        (TyExn (IncorrectNumberOfTypeArguments (TypeForAll (names', ty), tys)))
+      incorrect_number_of_type_arguments (TypeForAll (names', ty)) tys
     else
       List.fold_left2 (fun ty from _to -> substitute from _to ty) ty names tys
 
@@ -974,16 +776,14 @@ module Make (Ctx : Context) = struct
                   (List.map (fun (a, b) -> (subs a, subs b)) restrictions')
                   (fun t -> sigma t |> subs)
           | TypeVar (StellaIdent name), _ ->
-              if check_recur name ty2 then
-                raise (TyExn (OccursCheckInfiniteType ty2))
+              if check_recur name ty2 then occurs_check_infinite_type ty2
               else
                 let subs = substitute name ty2 in
                 unify'
                   (List.map (fun (a, b) -> (subs a, subs b)) restrictions')
                   (fun t -> sigma t |> subs)
           | _, TypeVar (StellaIdent name) ->
-              if check_recur name ty1 then
-                raise (TyExn (OccursCheckInfiniteType ty1))
+              if check_recur name ty1 then occurs_check_infinite_type ty1
               else
                 let subs = substitute name ty1 in
                 unify'
@@ -1050,11 +850,9 @@ module Make (Ctx : Context) = struct
               in
               if List.compare_length_with extraFields 0 <> 0 then
                 (* TODO: Version for unify *)
-                raise
-                  (TyExn (UnexpectedRecordFields (extraFields, ty2, ConstUnit)))
+                unexpected_record_fields extraFields ty2 ConstUnit
               else if List.compare_length_with missingFields 0 <> 0 then
-                raise
-                  (TyExn (MissingRecordFields (missingFields, ty2, ConstUnit)))
+                missing_record_fields missingFields ty2 ConstUnit
               else unify' fieldPairs sigma
           (* | TypeVariant tricky not supported *)
           | TypeList ty1', TypeList ty2' ->
@@ -1063,7 +861,7 @@ module Make (Ctx : Context) = struct
               unify' ((ty1', ty2') :: restrictions') sigma
           | _ ->
               (* TODO: Add unification error *)
-              raise (TyExn (UnexpectedTypeForExpression (ty1, ty2, ConstUnit))))
+              unexpected_type_for_expression ty1 ty2 ConstUnit)
       | [] -> sigma
     in
     unify' restrictions Fun.id
@@ -1083,7 +881,7 @@ module Make (Ctx : Context) = struct
         else
           match infer ctx e1 with
           | TypeRef ty' -> typecheck ctx e2 ty'
-          | ty' -> raise (TyExn (NotAReference (ty', e1))))
+          | ty' -> not_a_reference ty' e1)
     | If (eIf, eThen, eElse), _ ->
         typecheck ctx eIf TypeBool;
         typecheck ctx eThen ty;
@@ -1151,16 +949,14 @@ module Make (Ctx : Context) = struct
         List.iter2
           (fun ty (AParamDecl (ident, ty')) ->
             if neq ty' ty then
-              raise
-                (TyExn
-                   (UnexpectedTypeForParameter (ty, ty', AParamDecl (ident, ty))))
+              unexpected_type_for_parameter ty ty' (to_param_decl ident ty)
             else ())
           tyParams params;
         let ctx' = put_params ctx params in
         check_type ctx' tyReturn;
         typecheck ctx' expr' tyReturn
     | Abstraction _, TypeTop -> infer ctx expr |> ignore
-    | Abstraction _, _ -> raise (TyExn (UnexpectedLambda (ty, expr)))
+    | Abstraction _, _ -> unexpected_lambda ty expr
     | Variant (StellaIdent name, SomeExprData expr'), TypeVariant fieldTypes ->
         (* TODO: No expr data *)
         let rec find (fieldTypes : variantFieldType list) =
@@ -1168,13 +964,13 @@ module Make (Ctx : Context) = struct
           | AVariantFieldType (StellaIdent name', SomeTyping ty') :: fieldTypes'
             ->
               if name = name' then ty' else find fieldTypes'
-          | _ -> raise (TyExn (UnexpectedVariantLabel (ty, name, expr)))
+          | _ -> unexpected_variant_label ty name expr
         in
         let ty' = find fieldTypes in
         typecheck ctx expr' ty'
     | Variant _, TypeTop -> infer ctx expr |> ignore
-    | Variant _, _ -> raise (TyExn (UnexpectedVariant (ty, expr)))
-    | Match (_, []), _ -> raise (TyExn (IllegalEmptyMatching expr))
+    | Variant _, _ -> unexpected_variant ty expr
+    | Match (_, []), _ -> illegal_empty_matching expr
     | Match (expr', cases), _ -> (
         let ty' = infer ctx expr' in
         List.iter
@@ -1186,14 +982,13 @@ module Make (Ctx : Context) = struct
           cases;
         let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
         match check_exhaustivness ps ty' with
-        | Some expr'' ->
-            raise (TyExn (NonexhaustiveMatchPatterns (expr'', expr)))
+        | Some expr'' -> nonexhaustive_match_patterns expr'' expr
         | None -> ())
     | List exprs, TypeList ty' ->
         List.iter (fun expr' -> typecheck ctx expr' ty') exprs
     | List [], TypeTop -> ()
     | List _, TypeTop -> infer ctx expr |> ignore
-    | List _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
+    | List _, _ -> unexpected_list ty expr
     | Add (e1, e2), _ ->
         if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
         else typecheck ctx e1 TypeNat;
@@ -1234,7 +1029,7 @@ module Make (Ctx : Context) = struct
             let tys' = List.map (fun (StellaIdent i) -> i) tys' in
             let ty'' = apply_type tys tys' tyRes in
             if neq ty'' ty then Ctx.unexpected_type ty ty'' expr
-        | _ -> raise (TyExn (NotAGenericFunction ty')))
+        | _ -> not_a_generic_function ty')
     | DotRecord _, _ ->
         let ty' = infer ctx expr in
         if neq ty' ty then Ctx.unexpected_type ty ty' expr else ()
@@ -1243,17 +1038,14 @@ module Make (Ctx : Context) = struct
         if neq ty' ty then Ctx.unexpected_type ty ty' expr else ()
     | Tuple exprs, TypeTuple tyExprs ->
         if List.compare_lengths exprs tyExprs <> 0 then
-          raise
-            (TyExn
-               (UnexpectedTupleLength
-                  (List.length tyExprs, List.length exprs, expr)))
+          unexpected_tuple_length (List.length tyExprs) (List.length exprs) expr
         else
           List.fold_left
             (fun _ (expr, ty) -> typecheck ctx expr ty)
             ()
             (List.combine exprs tyExprs)
     | Tuple _, TypeTop -> infer ctx expr |> ignore
-    | Tuple _, _ -> raise (TyExn (UnexpectedTuple (ty, expr)))
+    | Tuple _, _ -> unexpected_tuple ty expr
     | Record fields, TypeRecord fieldTypes ->
         let fields' =
           List.map
@@ -1274,7 +1066,7 @@ module Make (Ctx : Context) = struct
         in
         let dupFields = findDupFields fields' [] in
         if List.compare_length_with dupFields 0 <> 0 then
-          raise (TyExn (DuplicateRecordFields (dupFields, expr)))
+          duplicate_record_fields dupFields expr
         else
           let fieldTypes' =
             List.map
@@ -1306,16 +1098,16 @@ module Make (Ctx : Context) = struct
             convert fields' fieldTypes' ([], [], [])
           in
           if List.compare_length_with extraFields 0 <> 0 && not Ctx.is_subtyping
-          then raise (TyExn (UnexpectedRecordFields (extraFields, ty, expr)))
+          then unexpected_record_fields extraFields ty expr
           else if List.compare_length_with missingFields 0 <> 0 then
-            raise (TyExn (MissingRecordFields (missingFields, ty, expr)))
+            missing_record_fields missingFields ty expr
           else List.iter (fun (expr', ty') -> typecheck ctx expr' ty') fieldExpr
     | Record _, TypeTop -> infer ctx expr |> ignore
-    | Record _, _ -> raise (TyExn (UnexpectedRecord (ty, expr)))
+    | Record _, _ -> unexpected_record ty expr
     | ConsList (e1, e2), TypeList ty' ->
         typecheck ctx e1 ty';
         typecheck ctx e2 ty
-    | ConsList _, _ -> raise (TyExn (UnexpectedList (ty, expr)))
+    | ConsList _, _ -> unexpected_list ty expr
     | Head _, _ ->
         let ty' = infer ctx expr in
         if neq ty' ty then Ctx.unexpected_type ty ty' expr else ()
@@ -1329,13 +1121,13 @@ module Make (Ctx : Context) = struct
     | Throw expr', _ -> (
         match Ctx.exception_type with
         | Some ty' -> typecheck ctx expr' ty'
-        | None -> raise (TyExn (ExceptionTypeNotDeclared expr)))
+        | None -> exception_type_not_declared expr)
     | TryCatch (e1, pat, e2), _ ->
         typecheck ctx e1 ty;
         let exception_type =
           match Ctx.exception_type with
           | Some ty -> ty
-          | None -> raise (TyExn (ExceptionTypeNotDeclared expr))
+          | None -> exception_type_not_declared expr
         in
         let ctx' =
           Context.concat [ deconstruct_pattern_binder pat exception_type ]
@@ -1346,10 +1138,10 @@ module Make (Ctx : Context) = struct
         typecheck ctx e2 ty
     | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
     | Inl expr', TypeTop -> typecheck ctx expr' TypeTop
-    | Inl _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
+    | Inl _, _ -> unexpected_injection ty expr
     | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
     | Inr expr', TypeTop -> typecheck ctx expr' TypeTop
-    | Inr _, _ -> raise (TyExn (UnexpectedInjection (ty, expr)))
+    | Inr _, _ -> unexpected_injection ty expr
     | Succ expr', _ ->
         if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
         else typecheck ctx expr' TypeNat
@@ -1379,17 +1171,17 @@ module Make (Ctx : Context) = struct
         if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr else ()
     | ConstMemory _, TypeRef _ -> ()
     | ConstMemory _, TypeTop -> ()
-    | ConstMemory _, _ -> raise (TyExn (UnexpectedMemoryAddress (ty, expr)))
+    | ConstMemory _, _ -> unexpected_memory_address ty expr
     | Var (StellaIdent name), _ -> (
         match Context.get ctx name with
-        | None -> raise (TyExn (UndefinedVariable (name, expr)))
+        | None -> undefined_variable name expr
         | Some ty' -> if neq ty' ty then Ctx.unexpected_type ty ty' expr else ()
         )
     | a, _ ->
         print_endline (ShowStella.show (ShowStella.showExpr a));
         not_implemented "typecheck"
 
-  and infer (ctx : context) (expr : AbsStella.expr) : AbsStella.typeT =
+  and infer (ctx : context) (expr : expr) : typeT =
     match expr with
     | Sequence (e1, e2) ->
         typecheck ctx e1 TypeUnit;
@@ -1397,7 +1189,8 @@ module Make (Ctx : Context) = struct
     | Assign (e1, e2) ->
         (match infer ctx e1 with
         | TypeRef ty' -> typecheck ctx e2 ty'
-        | ty' -> raise (TyExn (NotAReference (ty', e1))));
+        | ty' -> not_a_reference ty' e1);
+
         TypeUnit
     | If (eIf, eThen, eElse) ->
         typecheck ctx eIf TypeBool;
@@ -1464,8 +1257,8 @@ module Make (Ctx : Context) = struct
                   | SomeExprData data' -> SomeTyping (infer ctx data')
                   | NoExprData -> NoTyping );
             ]
-        else raise (TyExn (AmbiguousVariantType expr))
-    | Match (_, []) -> raise (TyExn (IllegalEmptyMatching expr))
+        else ambiguous_variant_type expr
+    | Match (_, []) -> illegal_empty_matching expr
     | Match (expr', AMatchCase (pat, expr'') :: cases) ->
         let ty' = infer ctx expr' in
         let tyRes =
@@ -1487,15 +1280,14 @@ module Make (Ctx : Context) = struct
             (AMatchCase (pat, expr'') :: cases)
         in
         (match check_exhaustivness ps ty' with
-        | Some expr'' ->
-            raise (TyExn (NonexhaustiveMatchPatterns (expr'', expr)))
+        | Some expr'' -> nonexhaustive_match_patterns expr'' expr
         | None -> ());
         tyRes
     | List (expr' :: exprs) ->
         let ty = infer ctx expr' in
         List.iter (fun expr'' -> typecheck ctx expr'' ty) exprs;
         TypeList ty
-    | List [] -> TypeList (Ctx.ambiguous (TyExn (AmbiguousList expr)))
+    | List [] -> TypeList (ambiguous_list' expr |> Ctx.ambiguous)
     | Add (e1, e2) ->
         typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat;
@@ -1524,7 +1316,7 @@ module Make (Ctx : Context) = struct
     | Deref expr' -> (
         match infer ctx expr' with
         | TypeRef ty' -> ty'
-        | ty' -> raise (TyExn (NotAReference (ty', expr'))))
+        | ty' -> not_a_reference ty' expr)
     | Application (eFun, eArgs) -> (
         (* TODO: Incorrect arity *)
         let tyFun = infer ctx eFun in
@@ -1548,8 +1340,8 @@ module Make (Ctx : Context) = struct
               Ctx.restrictions :=
                 (TypeFun (fresh_args, fresh_ret), tyFun) :: !Ctx.restrictions;
               fresh_ret)
-            else raise (TyExn (NotAFunction (tyFun, expr)))
-        | _ -> raise (TyExn (NotAFunction (tyFun, expr))))
+            else not_a_function tyFun expr
+        | _ -> not_a_function tyFun expr)
     | TypeApplication (expr, tys) -> (
         let ty' = infer ctx expr in
         match ty' with
@@ -1557,7 +1349,7 @@ module Make (Ctx : Context) = struct
             let tys' = List.map (fun (StellaIdent i) -> i) tys' in
             let ty'' = apply_type tys tys' tyRes in
             ty''
-        | _ -> raise (TyExn (NotAGenericFunction ty')))
+        | _ -> not_a_generic_function ty')
     | DotRecord (expr', StellaIdent name) -> (
         let tyRec = infer ctx expr' in
         match tyRec with
@@ -1566,7 +1358,7 @@ module Make (Ctx : Context) = struct
               match fields with
               | ARecordFieldType (StellaIdent name', tyField) :: fields' ->
                   if name' = name then tyField else find_field fields'
-              | [] -> raise (TyExn (UnexpectedFieldAccess (tyRec, name, expr)))
+              | [] -> unexpected_field_access tyRec name expr
             in
             find_field fields
         | TypeVar (StellaIdent name') ->
@@ -1577,14 +1369,14 @@ module Make (Ctx : Context) = struct
                   tyRec )
                 :: !Ctx.restrictions;
               fresh_ty)
-            else raise (TyExn (NotARecord (tyRec, expr)))
-        | _ -> raise (TyExn (NotARecord (tyRec, expr))))
+            else not_a_record tyRec expr
+        | _ -> not_a_record tyRec expr)
     | DotTuple (expr, n) -> (
         let ty = infer ctx expr in
         match ty with
         | TypeTuple tyTuple ->
             if List.compare_length_with tyTuple n < 0 || n <= 0 then
-              raise (TyExn (TupleIndexOutOfBounds (ty, n, expr)))
+              tuple_index_out_of_bounds ty n expr
             else List.nth tyTuple (n - 1)
         | TypeVar (StellaIdent name) ->
             if String.starts_with ~prefix:"?" name then (
@@ -1593,8 +1385,8 @@ module Make (Ctx : Context) = struct
               Ctx.restrictions :=
                 (TypeTuple [ ty1; ty2 ], ty) :: !Ctx.restrictions;
               List.nth [ ty1; ty2 ] (n - 1))
-            else raise (TyExn (NotATuple (ty, expr)))
-        | _ -> raise (TyExn (NotATuple (ty, expr))))
+            else not_a_tuple ty expr
+        | _ -> not_a_tuple ty expr)
     | Tuple exprs -> TypeTuple (List.map (infer ctx) exprs)
     | Record bindings ->
         let dup =
@@ -1602,7 +1394,7 @@ module Make (Ctx : Context) = struct
           |> find_dup
         in
         if List.compare_length_with dup 0 <> 0 then
-          raise (TyExn (DuplicateRecordFields (dup, expr)))
+          duplicate_record_fields dup expr
         else
           TypeRecord
             (List.map
@@ -1615,32 +1407,28 @@ module Make (Ctx : Context) = struct
         TypeList ty
     | Head expr' -> (
         let ty = infer ctx expr' in
-        match ty with
-        | TypeList tyElem -> tyElem
-        | _ -> raise (TyExn (NotAList (ty, expr))))
+        match ty with TypeList tyElem -> tyElem | _ -> not_a_list ty expr)
     | IsEmpty expr' -> (
         let ty = infer ctx expr' in
-        match ty with
-        | TypeList _ -> TypeBool
-        | _ -> raise (TyExn (NotAList (ty, expr))))
+        match ty with TypeList _ -> TypeBool | _ -> not_a_list ty expr)
     | Tail expr' -> (
         let ty = infer ctx expr' in
         match ty with
         | TypeList tyElem -> TypeList tyElem
-        | _ -> raise (TyExn (NotAList (ty, expr))))
-    | Panic -> Ctx.ambiguous (TyExn (AmbiguousPanicType expr))
+        | _ -> not_a_list ty expr)
+    | Panic -> ambiguous_panic_type' expr |> Ctx.ambiguous
     | Throw expr' ->
-        let tyRes = Ctx.ambiguous (TyExn (AmbiguousThrowType expr)) in
+        let tyRes = ambiguous_throw_type' expr |> Ctx.ambiguous in
         (match Ctx.exception_type with
         | Some ty' -> typecheck ctx expr' ty'
-        | None -> raise (TyExn (ExceptionTypeNotDeclared expr)));
+        | None -> exception_type_not_declared expr);
         tyRes
     | TryCatch (e1, pat, e2) ->
         let ty = infer ctx e1 in
         let exception_type =
           match Ctx.exception_type with
           | Some ty -> ty
-          | None -> raise (TyExn (ExceptionTypeNotDeclared expr))
+          | None -> exception_type_not_declared expr
         in
         let ctx' =
           Context.concat [ deconstruct_pattern_binder pat exception_type ]
@@ -1652,11 +1440,11 @@ module Make (Ctx : Context) = struct
         typecheck ctx e2 ty;
         ty
     | Inl expr' ->
-        let right = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
+        let right = ambiguous_sum_type' expr |> Ctx.ambiguous in
         let left = infer ctx expr' in
         TypeSum (left, right)
     | Inr expr' ->
-        let left = Ctx.ambiguous (TyExn (AmbiguousSumType expr)) in
+        let left = ambiguous_sum_type' expr |> Ctx.ambiguous in
         let right = infer ctx expr' in
         TypeSum (left, right)
     | Succ expr' ->
@@ -1687,8 +1475,8 @@ module Make (Ctx : Context) = struct
               Ctx.restrictions :=
                 (TypeFun ([ fresh_ty ], fresh_ty), ty) :: !Ctx.restrictions;
               fresh_ty)
-            else raise (TyExn (NotAFunction (ty, expr)))
-        | _ -> raise (TyExn (NotAFunction (ty, expr))))
+            else not_a_function ty expr
+        | _ -> not_a_function ty expr)
     | NatRec (eN, eZ, eS) ->
         typecheck ctx eN TypeNat;
         let ty = infer ctx eZ in
@@ -1698,12 +1486,11 @@ module Make (Ctx : Context) = struct
     | ConstFalse -> TypeBool
     | ConstUnit -> TypeUnit
     | ConstInt _ -> TypeNat
-    | ConstMemory _ ->
-        TypeRef (Ctx.ambiguous (TyExn (AmbiguousReferenceType expr)))
+    | ConstMemory _ -> TypeRef (ambiguous_reference_type' expr |> Ctx.ambiguous)
     | Var (StellaIdent name) -> (
         match Context.get ctx name with
         | Some ty -> ty
-        | None -> raise (TyExn (UndefinedVariable (name, expr))))
+        | None -> undefined_variable name expr)
     | _ -> not_implemented "infer"
 end
 
@@ -1714,8 +1501,8 @@ let typecheckProgram (AProgram (_, extensions, decls) : program) =
       extensions
   in
   let ambiguous =
-    if List.mem "#ambiguous-type-as-bottom" extensions' then fun e -> TypeBottom
-    else fun e -> raise e
+    if List.mem "#ambiguous-type-as-bottom" extensions' then fun _ -> TypeBottom
+    else fun f -> f ()
   in
   let exception_type =
     if List.mem "#open-variant-exceptions" extensions' then
@@ -1740,10 +1527,7 @@ let typecheckProgram (AProgram (_, extensions, decls) : program) =
   let restrictions = ref [] in
   let eq = if is_subtyping then subtype else make_eq restrictions in
   let unexpected_type =
-    if is_subtyping then fun ty1 ty2 expr ->
-      raise (TyExn (UnexpectedSubtype (ty1, ty2, expr)))
-    else fun ty1 ty2 expr ->
-      raise (TyExn (UnexpectedTypeForExpression (ty1, ty2, expr)))
+    if is_subtyping then unexpected_subtype else unexpected_type_for_expression
   in
   let count = ref 0 in
   let fresh_var () : string =
