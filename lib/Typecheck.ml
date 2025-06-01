@@ -1378,18 +1378,15 @@ module Make (Ctx : Context) = struct
     | _ -> not_implemented "infer"
 end
 
-let typecheckProgram (AProgram (_, extensions, decls) : program) =
-  let extensions' =
-    List.concat_map
-      (fun (AnExtension ext) -> List.map (fun (ExtensionName name) -> name) ext)
-      extensions
-  in
+let typecheckProgram (program : program) =
+  let extensions = get_extensions' program |> Extensions.to_record in
+  let (_, decls) = get_program' program in
   let ambiguous =
-    if List.mem "#ambiguous-type-as-bottom" extensions' then fun _ -> TypeBottom
+    if extensions.ambiguous_type_as_bottom then fun _ -> TypeBottom
     else fun f -> f ()
   in
   let exception_type =
-    if List.mem "#open-variant-exceptions" extensions' then
+    if extensions.open_variant_exceptions then
       let variants =
         List.concat_map
           (function
@@ -1406,8 +1403,8 @@ let typecheckProgram (AProgram (_, extensions, decls) : program) =
           match decl with DeclExceptionType ty -> Some ty | _ -> None)
         decls
   in
-  let is_subtyping = List.mem "#structural-subtyping" extensions' in
-  let is_reconstruction = List.mem "#type-reconstruction" extensions' in
+  let is_subtyping = extensions.structural_subtyping in
+  let is_reconstruction = extensions.type_reconstruction in
   let restrictions = ref [] in
   let eq = if is_subtyping then subtype else make_eq restrictions in
   let unexpected_type =

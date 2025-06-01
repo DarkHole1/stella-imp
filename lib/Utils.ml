@@ -122,6 +122,39 @@ let to_typing expr ty = ATyping (expr, ty)
 module Extensions = struct
   type t = string list
 
+  type rcd = {
+    unit_type : bool;
+    pairs : bool;
+    tuples : bool;
+    records : bool;
+    let_bindings : bool;
+    type_ascriptions : bool;
+    sum_types : bool;
+    lists : bool;
+    variants : bool;
+    fixpoint_combinator : bool;
+    natural_literals : bool;
+    nested_function_declarations : bool;
+    nullary_functions : bool;
+    multiparameter_functions : bool;
+    structural_patterns : bool;
+    nullary_variant_labels : bool;
+    letrec_bindings : bool;
+    pattern_ascriptions : bool;
+    sequencing : bool;
+    references : bool;
+    panic : bool;
+    exceptions : bool;
+    exception_type_annotation : bool;
+    structural_subtyping : bool;
+    ambiguous_type_as_bottom : bool;
+    open_variant_exceptions : bool;
+    try_cast_as : bool;
+    type_cast_patterns : bool;
+    type_reconstruction : bool;
+    universal_types : bool;
+  }
+
   let make (extensions : string list) : t = extensions
 
   (* Stage 1 *)
@@ -174,6 +207,40 @@ module Extensions = struct
   (* Stage 3 *)
   let type_reconstruction : t -> bool = List.mem "#type-reconstruction"
   let universal_types : t -> bool = List.mem "#universal-types"
+
+  let to_record (exts : t) : rcd =
+    {
+      unit_type = unit_type exts;
+      pairs = pairs exts;
+      tuples = tuples exts;
+      records = records exts;
+      let_bindings = let_bindings exts;
+      type_ascriptions = type_ascriptions exts;
+      sum_types = sum_types exts;
+      lists = lists exts;
+      variants = variants exts;
+      fixpoint_combinator = fixpoint_combinator exts;
+      natural_literals = natural_literals exts;
+      nested_function_declarations = nested_function_declarations exts;
+      nullary_functions = nullary_functions exts;
+      multiparameter_functions = multiparameter_functions exts;
+      structural_patterns = structural_patterns exts;
+      nullary_variant_labels = nullary_variant_labels exts;
+      letrec_bindings = letrec_bindings exts;
+      pattern_ascriptions = pattern_ascriptions exts;
+      sequencing = sequencing exts;
+      references = references exts;
+      panic = panic exts;
+      exceptions = exceptions exts;
+      exception_type_annotation = exception_type_annotation exts;
+      structural_subtyping = structural_subtyping exts;
+      ambiguous_type_as_bottom = ambiguous_type_as_bottom exts;
+      open_variant_exceptions = open_variant_exceptions exts;
+      try_cast_as = try_cast_as exts;
+      type_cast_patterns = type_cast_patterns exts;
+      type_reconstruction = type_reconstruction exts;
+      universal_types = universal_types exts;
+    }
 end
 
 let get_extensions (AProgram (_, extensions, _)) =
