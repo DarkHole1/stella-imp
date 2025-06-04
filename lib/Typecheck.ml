@@ -463,16 +463,16 @@ let rec fresh_decls (fresh_var : unit -> string) (decls : decl list) : decl list
   let fresh_return = map_return_type fresh_type in
   let fresh_throws = map_throw_type (List.map fresh_type) in
   let fresh_expr =
-    let fresh_expr' (traverse : expr -> expr) = function
+    let rec fresh_expr' (traverse : expr -> expr) = function
       | TypeAsc (expr, ty) -> TypeAsc (traverse expr, fresh_type ty)
       | TypeCast (expr, ty) -> TypeCast (traverse expr, fresh_type ty)
-      | Abstraction (params, expr) -> Abstraction (fresh_params params, expr)
+      | Abstraction (params, expr) -> Abstraction (fresh_params params, fresh_expr' traverse expr)
       | TypeApplication (expr, tys) ->
           TypeApplication (expr, List.map fresh_type tys)
       | TryCastAs (e1, ty, pat, e2, e3) ->
-          TryCastAs (traverse e1, fresh_type ty, pat, traverse e2, traverse e3)
-      | Fold (ty, expr) -> Fold (fresh_type ty, traverse expr)
-      | Unfold (ty, expr) -> Unfold (fresh_type ty, traverse expr)
+          TryCastAs (fresh_expr' traverse e1, fresh_type ty, pat, fresh_expr' traverse e2, fresh_expr' traverse e3)
+      | Fold (ty, expr) -> Fold (fresh_type ty, fresh_expr' traverse expr)
+      | Unfold (ty, expr) -> Unfold (fresh_type ty, fresh_expr' traverse expr)
       | expr -> traverse expr
     in
     fresh_expr' (traverse_expr fresh_expr')
@@ -1475,6 +1475,7 @@ let typecheckProgram (program : program) =
   end) in
   let typecheck = M.typecheck in
   let decls = fresh_decls fresh_var decls in
+  (* print_endline (String.concat "\n" (List.map PrintStella.(printTree prtDecl) decls)) ; *)
   let ctx =
     List.fold_left
       (fun a b ->

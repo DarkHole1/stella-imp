@@ -1,0 +1,2 @@
+throw (true)
+true
