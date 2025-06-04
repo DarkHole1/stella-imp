@@ -453,7 +453,7 @@ let rec fresh_decls (fresh_var : unit -> string) (decls : decl list) : decl list
       | TypeAuto -> TypeVar (fresh_var' ())
       | ty -> traverse ty
     in
-    traverse_type fresh_type'
+    fresh_type' (traverse_type fresh_type')
   in
   let fresh_params =
     List.map (fun (AParamDecl (ident, ty)) -> AParamDecl (ident, fresh_type ty))
@@ -473,7 +473,7 @@ let rec fresh_decls (fresh_var : unit -> string) (decls : decl list) : decl list
       | Unfold (ty, expr) -> Unfold (fresh_type ty, traverse expr)
       | expr -> traverse expr
     in
-    traverse_expr fresh_expr'
+    fresh_expr' (traverse_expr fresh_expr')
   in
   List.map
     (function

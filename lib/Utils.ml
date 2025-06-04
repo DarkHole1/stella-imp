@@ -253,9 +253,9 @@ let get_record_fields (fields : recordFieldType list) =
 
 let get_binders (binders : binding list) = List.map get_binding' binders
 
-let rec traverse_type (f : (typeT -> typeT) -> typeT -> typeT) =
+let rec traverse_type (f : (typeT -> typeT) -> typeT -> typeT) (ty : typeT) =
   let f = f (traverse_type f) in
-  function
+  match ty with
   | TypeAuto -> TypeAuto
   | TypeFun (tys, ty) -> TypeFun (List.map f tys, f ty)
   | TypeForAll (idents, ty) -> TypeForAll (idents, f ty)
@@ -283,9 +283,9 @@ let rec traverse_type (f : (typeT -> typeT) -> typeT -> typeT) =
   | TypeRef ty -> TypeRef (f ty)
   | TypeVar ident -> TypeVar ident
 
-let rec traverse_expr (f : (expr -> expr) -> expr -> expr) =
+let rec traverse_expr (f : (expr -> expr) -> expr -> expr) (expr : expr) =
   let f = f (traverse_expr f) in
-  function
+  match expr with
   | Sequence (e1, e2) -> Sequence (f e1, f e2)
   | Assign (e1, e2) -> Assign (f e1, f e2)
   | If (e1, e2, e3) -> If (f e1, f e2, f e3)
