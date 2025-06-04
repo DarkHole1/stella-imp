@@ -466,11 +466,17 @@ let rec fresh_decls (fresh_var : unit -> string) (decls : decl list) : decl list
     let rec fresh_expr' (traverse : expr -> expr) = function
       | TypeAsc (expr, ty) -> TypeAsc (traverse expr, fresh_type ty)
       | TypeCast (expr, ty) -> TypeCast (traverse expr, fresh_type ty)
-      | Abstraction (params, expr) -> Abstraction (fresh_params params, fresh_expr' traverse expr)
+      | Abstraction (params, expr) ->
+          Abstraction (fresh_params params, fresh_expr' traverse expr)
       | TypeApplication (expr, tys) ->
           TypeApplication (expr, List.map fresh_type tys)
       | TryCastAs (e1, ty, pat, e2, e3) ->
-          TryCastAs (fresh_expr' traverse e1, fresh_type ty, pat, fresh_expr' traverse e2, fresh_expr' traverse e3)
+          TryCastAs
+            ( fresh_expr' traverse e1,
+              fresh_type ty,
+              pat,
+              fresh_expr' traverse e2,
+              fresh_expr' traverse e3 )
       | Fold (ty, expr) -> Fold (fresh_type ty, fresh_expr' traverse expr)
       | Unfold (ty, expr) -> Unfold (fresh_type ty, fresh_expr' traverse expr)
       | expr -> traverse expr
@@ -580,6 +586,7 @@ module type Context = sig
   val ambiguous : (unit -> typeT) -> typeT
   val exception_type : typeT option
   val is_subtyping : bool
+  val is_reconstruction : bool
   val eq : typeT -> typeT -> bool
   val unexpected_type : typeT -> typeT -> expr -> 'a
   val fresh_var : unit -> string
@@ -871,20 +878,23 @@ module Make (Ctx : Context) = struct
           Ctx.restrictions := (ty', ty) :: !Ctx.restrictions
         else unexpected_variant ty expr
     | Variant _, _ -> unexpected_variant ty expr
-    | Match (_, []), _ -> illegal_empty_matching expr
-    | Match (expr', cases), _ -> (
-        let ty' = infer ctx expr' in
-        List.iter
-          (fun (AMatchCase (pat, expr'')) ->
-            let ctx' =
-              Context.concat [ deconstruct_pattern_binder pat ty'; ctx ]
-            in
-            typecheck ctx' expr'' ty)
-          cases;
-        let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
-        match check_exhaustivness ps ty' with
-        | Some expr'' -> nonexhaustive_match_patterns expr'' expr
-        | None -> ())
+    | Match (_, []), _ ->
+        if not Ctx.is_reconstruction then illegal_empty_matching expr else ()
+    | Match (expr', cases), _ ->
+        if not Ctx.is_reconstruction then (
+          let ty' = infer ctx expr' in
+          List.iter
+            (fun (AMatchCase (pat, expr'')) ->
+              let ctx' =
+                Context.concat [ deconstruct_pattern_binder pat ty'; ctx ]
+              in
+              typecheck ctx' expr'' ty)
+            cases;
+          let ps = List.map (fun (AMatchCase (p, _)) -> p) cases in
+          match check_exhaustivness ps ty' with
+          | Some expr'' -> nonexhaustive_match_patterns expr'' expr
+          | None -> ())
+        else ()
     | List exprs, TypeList ty' ->
         List.iter (fun expr' -> typecheck ctx expr' ty') exprs
     | List [], TypeTop -> ()
@@ -1225,7 +1235,12 @@ module Make (Ctx : Context) = struct
         let ty = infer ctx expr' in
         List.iter (fun expr'' -> typecheck ctx expr'' ty) exprs;
         TypeList ty
-    | List [] -> TypeList (ambiguous_list' expr |> Ctx.ambiguous)
+    | List [] ->
+        let ty' =
+          if Ctx.is_reconstruction then TypeVar (StellaIdent (Ctx.fresh_var ()))
+          else ambiguous_list' expr |> Ctx.ambiguous
+        in
+        TypeList ty'
     | Add (e1, e2) ->
         typecheck ctx e1 TypeNat;
         typecheck ctx e2 TypeNat;
@@ -1378,11 +1393,17 @@ module Make (Ctx : Context) = struct
         typecheck ctx e2 ty;
         ty
     | Inl expr' ->
-        let right = ambiguous_sum_type' expr |> Ctx.ambiguous in
+        let right =
+          if Ctx.is_reconstruction then TypeVar (StellaIdent (Ctx.fresh_var ()))
+          else ambiguous_sum_type' expr |> Ctx.ambiguous
+        in
         let left = infer ctx expr' in
         TypeSum (left, right)
     | Inr expr' ->
-        let left = ambiguous_sum_type' expr |> Ctx.ambiguous in
+        let left =
+          if Ctx.is_reconstruction then TypeVar (StellaIdent (Ctx.fresh_var ()))
+          else ambiguous_sum_type' expr |> Ctx.ambiguous
+        in
         let right = infer ctx expr' in
         TypeSum (left, right)
     | Succ expr' ->
@@ -1424,7 +1445,9 @@ module Make (Ctx : Context) = struct
     | ConstFalse -> TypeBool
     | ConstUnit -> TypeUnit
     | ConstInt _ -> TypeNat
-    | ConstMemory _ -> TypeRef (ambiguous_reference_type' expr |> Ctx.ambiguous)
+    | ConstMemory _ ->
+        if Ctx.is_reconstruction then TypeVar (StellaIdent (Ctx.fresh_var ()))
+        else TypeRef (ambiguous_reference_type' expr |> Ctx.ambiguous)
     | Var (StellaIdent name) -> (
         match Context.get ctx name with
         | Some ty -> ty
@@ -1473,6 +1496,7 @@ let typecheckProgram (program : program) =
     let ambiguous = ambiguous
     let exception_type = exception_type
     let is_subtyping = is_subtyping
+    let is_reconstruction = is_reconstruction
     let eq = eq
     let unexpected_type = unexpected_type
     let fresh_var = fresh_var
