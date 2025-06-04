@@ -22,6 +22,7 @@ let parse_string_typeT (s : string) =
 
 module type Context = sig
   val structural_subtyping : bool
+  val reconstruction : bool
   val ambiguous_types_as_bottom : bool
   val exception_type : string option
 end
@@ -41,6 +42,7 @@ module Make (Ctx : Context) = struct
 
     let exception_type = Option.map parse_string_typeT Ctx.exception_type
     let is_subtyping = Ctx.structural_subtyping
+    let is_reconstruction = Ctx.reconstruction
 
     let eq =
       if Ctx.structural_subtyping then Typecheck.subtype
@@ -132,6 +134,7 @@ end
 include Make (struct
   let structural_subtyping = false
   let ambiguous_types_as_bottom = false
+  let reconstruction = false
   let exception_type = None
 end)
 

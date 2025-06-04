@@ -281,6 +281,7 @@ let test_errors () =
       let structural_subtyping = false
       let ambiguous_types_as_bottom = false
       let exception_type = Some ty
+      let reconstruction = false
     end) in
     check
       ("(" ^ ty ^ ") throw (" ^ tyv ^ ") <= Nat")
@@ -321,6 +322,7 @@ let test_subtyping () =
     let structural_subtyping = true
     let ambiguous_types_as_bottom = false
     let exception_type = None
+    let reconstruction = false
   end) in
   check "true <=> Bool" (o |- "true" <=> "Bool");
   check "false <=> Bool" (o |- "false" <=> "Bool");
@@ -374,6 +376,7 @@ let test_ambiguous_as_bottom () =
     let structural_subtyping = true
     let ambiguous_types_as_bottom = true
     let exception_type = Some "Unit"
+    let reconstruction = false
   end) in
   check "inl (true) => Bool + Bot" (o |- "inl (true)" => "Bool + Bot");
   check "inr (true) => Bot + Bool" (o |- "inr (true)" => "Bot + Bool");
@@ -387,6 +390,7 @@ let test_variant_exceptions () =
     let structural_subtyping = false
     let ambiguous_types_as_bottom = false
     let exception_type = Some "<| a : Unit, b : Nat |>"
+    let reconstruction = false
   end) in
   check "throw (<| a = unit |>) <= Unit"
     (o |- "throw (<| a = unit |>)" <= "Unit");
@@ -467,6 +471,7 @@ let test_reconstruction () =
       let structural_subtyping = false
       let ambiguous_types_as_bottom = false
       let exception_type = None
+      let reconstruction = false
     end) in
     let var = Stella.AbsStella.(TypeVar (StellaIdent (fresh_var ()))) in
     let ctx = Stella.Context.from_var s var in
@@ -479,6 +484,7 @@ let test_reconstruction () =
       let structural_subtyping = false
       let ambiguous_types_as_bottom = false
       let exception_type = None
+      let reconstruction = false
     end) in
     let var = Stella.AbsStella.(TypeVar (StellaIdent (fresh_var ()))) in
     let ctx = Stella.Context.from_var s var in
@@ -553,6 +559,7 @@ let test_bugs () =
     let structural_subtyping = true
     let ambiguous_types_as_bottom = false
     let exception_type = Some "Top"
+    let reconstruction = false
   end) in
   check "throw(true) <= Top" (o |- "throw (true)" <= "Top");
   check "match (0) { x => x } <=> Nat" (o |- "match (0) { x => x }" <=> "Nat");
