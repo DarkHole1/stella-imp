@@ -289,8 +289,20 @@ let rec traverse_expr (f : (expr -> expr) -> expr -> expr) (expr : expr) =
   | Sequence (e1, e2) -> Sequence (f e1, f e2)
   | Assign (e1, e2) -> Assign (f e1, f e2)
   | If (e1, e2, e3) -> If (f e1, f e2, f e3)
-  | Let (patterns, expr) -> Let (patterns, f expr)
-  | LetRec (patterns, expr) -> LetRec (patterns, f expr)
+  | Let (patterns, expr) ->
+      Let
+        ( List.map
+            (fun (APatternBinding (pattern, expr)) ->
+              APatternBinding (pattern, f expr))
+            patterns,
+          f expr )
+  | LetRec (patterns, expr) ->
+      LetRec
+        ( List.map
+            (fun (APatternBinding (pattern, expr)) ->
+              APatternBinding (pattern, f expr))
+            patterns,
+          f expr )
   | TypeAbstraction (idents, expr) -> TypeAbstraction (idents, f expr)
   | LessThan (e1, e2) -> LessThan (f e1, f e2)
   | LessThanOrEqual (e1, e2) -> LessThanOrEqual (f e1, f e2)
