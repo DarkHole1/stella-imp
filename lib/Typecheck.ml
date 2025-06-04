@@ -745,6 +745,11 @@ module Make (Ctx : Context) = struct
               unify' ((ty1', ty2') :: restrictions') sigma
           | TypeRef ty1', TypeRef ty2' ->
               unify' ((ty1', ty2') :: restrictions') sigma
+          | TypeBool, TypeBool -> unify' restrictions' sigma
+          | TypeNat, TypeNat -> unify' restrictions' sigma
+          | TypeUnit, TypeUnit -> unify' restrictions' sigma
+          | TypeTop, TypeTop -> unify' restrictions' sigma
+          | TypeBottom, TypeBottom -> unify' restrictions' sigma
           | _ ->
               (* TODO: Add unification error *)
               unexpected_type_for_expression ty1 ty2 ConstUnit)
