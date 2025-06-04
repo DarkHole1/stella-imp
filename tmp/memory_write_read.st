@@ -1,7 +1,0 @@
-<0x01> as & Nat := 0;
-* (<0x01> as & Nat)
-* (<0x01> as & Nat)
-<0x01> as & Nat
-<0x01> as & Nat := 0
-0
-<0x01> as & Nat
