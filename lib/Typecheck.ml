@@ -442,7 +442,9 @@ let rec check_type (ctx : context) (ty : typeT) =
   | TypeList ty -> check_type ctx ty
   | TypeRef ty -> check_type ctx ty
   | TypeVar (StellaIdent name) ->
-      if Context.has_type ctx name then () else undefined_type_variable ty
+      if String.starts_with ~prefix:"?" name || Context.has_type ctx name then
+        ()
+      else undefined_type_variable ty
   | _ -> ()
 
 let rec fresh_decls (fresh_var : unit -> string) (decls : decl list) : decl list
@@ -1380,7 +1382,7 @@ end
 
 let typecheckProgram (program : program) =
   let extensions = get_extensions' program |> Extensions.to_record in
-  let (_, decls) = get_program' program in
+  let _, decls = get_program' program in
   let ambiguous =
     if extensions.ambiguous_type_as_bottom then fun _ -> TypeBottom
     else fun f -> f ()
