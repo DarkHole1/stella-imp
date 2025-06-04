@@ -842,6 +842,11 @@ module Make (Ctx : Context) = struct
         check_type ctx' tyReturn;
         typecheck ctx' expr' tyReturn
     | Abstraction _, TypeTop -> infer ctx expr |> ignore
+    | Abstraction _, TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then
+          let ty' = infer ctx expr in
+          Ctx.restrictions := (ty', ty) :: !Ctx.restrictions
+        else unexpected_lambda ty expr
     | Abstraction _, _ -> unexpected_lambda ty expr
     | Variant (StellaIdent name, SomeExprData expr'), TypeVariant fieldTypes ->
         (* TODO: No expr data *)
@@ -855,6 +860,11 @@ module Make (Ctx : Context) = struct
         let ty' = find fieldTypes in
         typecheck ctx expr' ty'
     | Variant _, TypeTop -> infer ctx expr |> ignore
+    | Variant _, TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then
+          let ty' = infer ctx expr in
+          Ctx.restrictions := (ty', ty) :: !Ctx.restrictions
+        else unexpected_variant ty expr
     | Variant _, _ -> unexpected_variant ty expr
     | Match (_, []), _ -> illegal_empty_matching expr
     | Match (expr', cases), _ -> (
@@ -874,6 +884,11 @@ module Make (Ctx : Context) = struct
         List.iter (fun expr' -> typecheck ctx expr' ty') exprs
     | List [], TypeTop -> ()
     | List _, TypeTop -> infer ctx expr |> ignore
+    | List _, TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then
+          let ty' = infer ctx expr in
+          Ctx.restrictions := (ty', ty) :: !Ctx.restrictions
+        else unexpected_list ty expr
     | List _, _ -> unexpected_list ty expr
     | Add (e1, e2), _ ->
         if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
@@ -931,6 +946,11 @@ module Make (Ctx : Context) = struct
             ()
             (List.combine exprs tyExprs)
     | Tuple _, TypeTop -> infer ctx expr |> ignore
+    | Tuple _, TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then
+          let ty' = infer ctx expr in
+          Ctx.restrictions := (ty', ty) :: !Ctx.restrictions
+        else unexpected_tuple ty expr
     | Tuple _, _ -> unexpected_tuple ty expr
     | Record fields, TypeRecord fieldTypes ->
         let fields' =
@@ -989,10 +1009,20 @@ module Make (Ctx : Context) = struct
             missing_record_fields missingFields ty expr
           else List.iter (fun (expr', ty') -> typecheck ctx expr' ty') fieldExpr
     | Record _, TypeTop -> infer ctx expr |> ignore
+    | Record _, TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then
+          let ty' = infer ctx expr in
+          Ctx.restrictions := (ty', ty) :: !Ctx.restrictions
+        else unexpected_record ty expr
     | Record _, _ -> unexpected_record ty expr
     | ConsList (e1, e2), TypeList ty' ->
         typecheck ctx e1 ty';
         typecheck ctx e2 ty
+    | ConsList _, TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then
+          let ty' = infer ctx expr in
+          Ctx.restrictions := (ty', ty) :: !Ctx.restrictions
+        else unexpected_list ty expr
     | ConsList _, _ -> unexpected_list ty expr
     | Head _, _ ->
         let ty' = infer ctx expr in
@@ -1024,9 +1054,21 @@ module Make (Ctx : Context) = struct
         typecheck ctx e2 ty
     | Inl expr', TypeSum (tyL, _) -> typecheck ctx expr' tyL
     | Inl expr', TypeTop -> typecheck ctx expr' TypeTop
+    | Inl expr', TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then
+          let ty' = infer ctx expr' in
+          let fty = TypeVar (StellaIdent (Ctx.fresh_var ())) in
+          Ctx.restrictions := (TypeSum (ty', fty), ty) :: !Ctx.restrictions
+        else unexpected_injection ty expr
     | Inl _, _ -> unexpected_injection ty expr
     | Inr expr', TypeSum (_, tyR) -> typecheck ctx expr' tyR
     | Inr expr', TypeTop -> typecheck ctx expr' TypeTop
+    | Inr expr', TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then
+          let ty' = infer ctx expr' in
+          let fty = TypeVar (StellaIdent (Ctx.fresh_var ())) in
+          Ctx.restrictions := (TypeSum (fty, ty'), ty) :: !Ctx.restrictions
+        else unexpected_injection ty expr
     | Inr _, _ -> unexpected_injection ty expr
     | Succ expr', _ ->
         if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr
@@ -1057,6 +1099,11 @@ module Make (Ctx : Context) = struct
         if neq TypeNat ty then Ctx.unexpected_type ty TypeNat expr else ()
     | ConstMemory _, TypeRef _ -> ()
     | ConstMemory _, TypeTop -> ()
+    | ConstMemory _, TypeVar (StellaIdent name) ->
+        if String.starts_with ~prefix:"?" name then
+          let fty = TypeVar (StellaIdent (Ctx.fresh_var ())) in
+          Ctx.restrictions := (TypeRef fty, ty) :: !Ctx.restrictions
+        else unexpected_memory_address ty expr
     | ConstMemory _, _ -> unexpected_memory_address ty expr
     | Var (StellaIdent name), _ -> (
         match Context.get ctx name with
